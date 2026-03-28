@@ -1,0 +1,43 @@
+"""TactoFlow Domain Layer."""
+
+from tacto.domain.shared import (
+    BusinessRuleViolationError,
+    ConversationId,
+    DomainException,
+    EntityId,
+    EntityNotFoundError,
+    Err,
+    Failure,
+    InvalidOperationError,
+    MessageId,
+    Ok,
+    OrderId,
+    PhoneNumber,
+    RestaurantId,
+    Result,
+    ResultUtils,
+    Success,
+    ValidationError,
+    ValueObject,
+)
+
+__all__ = [
+    "DomainException",
+    "ValidationError",
+    "EntityNotFoundError",
+    "BusinessRuleViolationError",
+    "InvalidOperationError",
+    "Result",
+    "Success",
+    "Failure",
+    "ResultUtils",
+    "Ok",
+    "Err",
+    "ValueObject",
+    "EntityId",
+    "RestaurantId",
+    "ConversationId",
+    "MessageId",
+    "OrderId",
+    "PhoneNumber",
+]

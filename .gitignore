@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# SSL certificates (never commit private keys)
+nginx/ssl/*.crt
+nginx/ssl/*.key
+nginx/ssl/*.pem
+nginx/ssl/*.csr
+
+# Draft/scaffold files
+IMPLEMENTACAO_COMPLETA.txt
+RESUMO_PARA_WINDSURF.txt
+setup_project_structure.py
+
+# Claude AI settings (local only)
+.claude/
+
+# Alembic local overrides
+alembic.ini.local

@@ -1,0 +1,74 @@
+# ============================================
+# TactoFlow Production Dockerfile
+# Multi-stage build for optimized image size
+# ============================================
+
+# Stage 1: Builder
+FROM python:3.12-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
+
+# Stage 2: Production
+FROM python:3.12-slim as production
+
+# Labels
+LABEL maintainer="TactoFlow Team"
+LABEL version="1.0.0"
+LABEL description="TactoFlow - AI-powered WhatsApp automation for restaurants"
+
+# Environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    APP_ENV=production \
+    PORT=8000
+
+WORKDIR /app
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && addgroup --system --gid 1001 tacto \
+    && adduser --system --uid 1001 --gid 1001 tacto
+
+# Copy wheels from builder and install
+COPY --from=builder /app/wheels /wheels
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir /wheels/* \
+    && rm -rf /wheels
+
+# Copy application code
+COPY --chown=tacto:tacto tacto/ ./tacto/
+COPY --chown=tacto:tacto alembic.ini .
+
+# Switch to non-root user
+USER tacto
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run with gunicorn for production
+CMD ["python", "-m", "gunicorn", "tacto.main:app", \
+    "--bind", "0.0.0.0:8000", \
+    "--workers", "4", \
+    "--worker-class", "uvicorn.workers.UvicornWorker", \
+    "--access-logfile", "-", \
+    "--error-logfile", "-", \
+    "--capture-output", \
+    "--enable-stdio-inheritance"]

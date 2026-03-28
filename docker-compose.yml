@@ -1,0 +1,85 @@
+version: "3.9"
+
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: tactoflow_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tacto
+      POSTGRES_PASSWORD: tacto
+      POSTGRES_DB: tacto_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tacto -d tacto_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and message buffering
+  redis:
+    image: redis:7-alpine
+    container_name: tactoflow_redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # TactoFlow API (development)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tactoflow_api
+    restart: unless-stopped
+    ports:
+      - "8100:8000"
+    environment:
+      - TZ=America/Sao_Paulo
+      - APP_NAME=TactoFlow
+      - APP_VERSION=0.0.1
+      - DEBUG=true
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=tacto
+      - DB_PASSWORD=tacto
+      - DB_NAME=tacto_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    env_file:
+      - .env
+    command: uvicorn tacto.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./tacto:/app/tacto
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./scripts:/app/scripts:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: tactoflow_network
