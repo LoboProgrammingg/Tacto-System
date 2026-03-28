@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from tacto.application.dto.message_dto import IncomingMessageDTO
 from tacto.application.services.message_buffer_service import MessageBufferService
+from tacto.infrastructure.messaging.instance_phone_cache import InstancePhoneCache
 
 
 logger = structlog.get_logger()
@@ -77,21 +78,34 @@ async def join_webhook(
 
         # ── Step 3: fromMe=true → check if AI-sent or human operator ─────────
         if from_me:
+            # Log full payload for debugging
+            message_content = data.get("message", {})
+            message_type = data.get("messageType", "unknown")
+            log.debug(
+                "from_me_payload_debug",
+                message_type=message_type,
+                message_id=message_id,
+                remote_jid=remote_jid,
+                has_conversation=bool(message_content.get("conversation")),
+                has_extended_text=bool(message_content.get("extendedTextMessage")),
+                message_keys=list(message_content.keys()) if message_content else [],
+            )
+            
             # Pass remoteJid as phone_for_check.
-            # The AI tracker stores the customer's phone with a very short TTL (5s).
+            # The AI tracker stores the customer's phone with a very short TTL.
             # This catches the echo webhook Join fires ~1s after the AI sends a message.
-            # After 5s the key expires — any later from_me is treated as human operator.
             phone_for_check = remote_jid.split("@")[0] if "@" in remote_jid else None
             is_ai_message = await _check_if_ai_sent_message(request, instance, message_id, phone_for_check)
             
             if is_ai_message:
                 return WebhookResponse(success=True, message="AI message ignored")
             
-            phone = _extract_sender_number(key, data)
-            if phone:
+            # Extract customer phone from remoteJid (the conversation partner)
+            customer_phone = _extract_sender_number(key, data)
+            if customer_phone:
                 dto = IncomingMessageDTO(
                     instance_key=instance,
-                    from_phone=phone,
+                    from_phone=customer_phone,
                     body="__human_operator__",
                     from_me=True,
                     source="phone",
@@ -100,7 +114,7 @@ async def join_webhook(
                     push_name=push_name,
                 )
                 background_tasks.add_task(_process_message_background, dto)
-                log.info("human_operator_detected", phone=phone)
+                log.info("human_operator_detected", customer_phone=customer_phone)
             return WebhookResponse(success=True, message="Operator message — AI paused")
 
         # ── Step 4: Extract text content ──────────────────────────────────

@@ -89,7 +89,7 @@ class RedisSettings(BaseSettings):
     memory_ttl: int = Field(default=3600, alias="REDIS_MEMORY_TTL")
     buffer_window_seconds: int = Field(default=5, alias="REDIS_BUFFER_WINDOW_SECONDS")
     buffer_lock_ttl: int = Field(default=10, alias="REDIS_BUFFER_LOCK_TTL")
-    echo_tracker_ttl: int = Field(default=5, alias="REDIS_ECHO_TRACKER_TTL")
+    echo_tracker_ttl: int = Field(default=15, alias="REDIS_ECHO_TRACKER_TTL")
     message_id_tracker_ttl: int = Field(default=300, alias="REDIS_MSG_ID_TRACKER_TTL")
 
     model_config = SettingsConfigDict(

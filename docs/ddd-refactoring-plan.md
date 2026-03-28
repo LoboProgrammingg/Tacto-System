@@ -370,3 +370,142 @@ Repository Impl         → infrastructure/persistence/<name>_repository.py
 - `ADR-001-ddd-architecture.md` — decisão original de usar DDD
 - `ADR-004-bounded-contexts.md` — **🆕 criar** — 5 contextos definidos e suas fronteiras
 - `ADR-005-layer-violations-fix.md` — **🆕 criar** — justificativa para mover MemoryManager e Level1Agent
+
+---
+
+## 10. 🚨 CONTEXTO CRÍTICO PARA CONTINUAÇÃO (Claude Code / Windsurf)
+
+> **Data:** 2026-03-28 | **Status:** Fase 2 completa, Fase 3 pendente
+
+### 10.1 Estado Atual do Projeto
+
+O sistema é um **assistente de IA para restaurantes via WhatsApp**. Funciona assim:
+
+1. Cliente envia mensagem WhatsApp → Join API dispara webhook
+2. Webhook bufferiza mensagens (5s) → combina mensagens rápidas consecutivas
+3. Use case `ProcessIncomingMessage` processa → busca RAG, carrega memória, chama IA
+4. `Level1Agent` gera resposta humanizada → envia via Join API
+5. Se operador humano responder pelo WhatsApp, IA desativa por 12h
+
+### 10.2 Arquivos Críticos — NÃO QUEBRAR
+
+| Arquivo | Função | Dependências |
+|---------|--------|--------------|
+| `interfaces/http/routes/webhook_join.py` | Recebe webhooks do Join | `MessageBufferService`, `SentMessageTracker` |
+| `application/use_cases/process_incoming_message.py` | Orquestra fluxo completo | `Level1Agent`, `MemoryManager`, repositórios |
+| `application/services/message_buffer_service.py` | Buffer de mensagens (Redis) | `RedisClient` |
+| `application/services/memory_orchestration_service.py` | Orquestra memória 3 níveis | `MemoryPort` implementations |
+| `domain/ai/agents/level1_agent.py` | Agente IA nível básico | `GeminiClient`, `MemoryManager` |
+| `infrastructure/messaging/join_client.py` | Envia mensagens WhatsApp | `SentMessageTracker` |
+| `infrastructure/messaging/sent_message_tracker.py` | Rastreia mensagens da IA | Redis TTL 15s |
+| `interfaces/http/dependencies.py` | Injeção de dependências FastAPI | Tudo |
+
+### 10.3 Fluxo de Detecção Operador Humano
+
+```
+Webhook chega com from_me=True
+    ↓
+Verifica se message_id ou phone está no SentMessageTracker (Redis)
+    ↓
+Se SIM → é eco da IA → ignorar
+Se NÃO → é operador humano → desativar IA 12h para esse cliente
+```
+
+**Configurações importantes em `config/settings.py`:**
+- `echo_tracker_ttl: int = 15` — segundos que a IA "lembra" que enviou mensagem
+- `ai_disable_hours: int = 12` — horas que IA fica desativada após operador humano
+
+### 10.4 Estrutura de Imports Atual (pós Fase 2)
+
+```python
+# ✅ CORRETO — Imports do novo local
+from tacto.domain.customer_memory.value_objects.memory_entry import MemoryEntry, MemoryType, ConversationMemory
+from tacto.domain.customer_memory.ports.memory_port import MemoryPort
+from tacto.application.services.memory_orchestration_service import MemoryManager
+
+# ✅ BACKWARD COMPAT — Re-exports funcionam (mas preferir imports diretos)
+from tacto.domain.ai.memory import MemoryManager, ConversationMemory  # re-exporta do novo local
+
+# ❌ QUEBRADO — Arquivo deletado
+from tacto.domain.ai.memory.memory_manager import MemoryManager  # NÃO EXISTE MAIS
+```
+
+### 10.5 Commits Realizados
+
+| Commit | Descrição |
+|--------|-----------|
+| `01f6d3a` | FASE 1 — Remove dead code (21 arquivos, 1119 linhas) |
+| `e96cfc5` | FASE 2 — Move MemoryManager para application/services |
+
+### 10.6 Próximos Passos (FASE 3)
+
+**Objetivo:** Mover `Level1Agent` e `BaseAgent` de `domain/ai/agents/` para `infrastructure/agents/`
+
+**Ordem de execução:**
+1. Criar `domain/ai_assistance/value_objects/` com VOs puros (`AgentContext`, `AgentResponse`)
+2. Mover `domain/assistant/ports/` → `domain/ai_assistance/ports/`
+3. Mover `domain/ai/prompts/` → `domain/ai_assistance/prompts/`
+4. Mover `domain/ai/agents/` → `infrastructure/agents/`
+5. Atualizar TODOS os imports
+6. Testar container + fluxo mensagem
+
+**⚠️ CUIDADO:**
+- `Level1Agent` importa muitas coisas — mapear ANTES de mover
+- `process_incoming_message.py` instancia `Level1Agent` diretamente
+- `dependencies.py` cria as dependências
+
+### 10.7 Comandos de Verificação
+
+```bash
+# Verificar se container sobe
+docker compose restart api && sleep 5 && docker compose logs --tail=20 api
+
+# Liberar número para teste (substitua o phone)
+docker compose exec postgres psql -U tacto -d tacto_db -c "UPDATE conversations SET is_ai_active = true WHERE customer_phone = '556592540370';"
+
+# Verificar imports proibidos no domínio
+grep -r "from tacto.infrastructure" tacto/domain/ --include="*.py"
+grep -r "import redis\|import sqlalchemy\|import httpx" tacto/domain/ --include="*.py"
+
+# Ver logs em tempo real
+docker compose logs -f api
+```
+
+### 10.8 Regras de Ouro
+
+1. **NUNCA** editar múltiplos arquivos de import sem testar entre cada um
+2. **SEMPRE** verificar se container sobe após cada mudança significativa
+3. **SEMPRE** manter backward compatibility com re-exports em `__init__.py`
+4. **NUNCA** deletar arquivo antes de atualizar todos os imports
+5. **SEMPRE** fazer commit após cada fase completa
+6. O `from_me=True` no webhook significa que o WhatsApp do restaurante enviou (pode ser IA ou humano)
+7. O `remoteJid` é sempre o número do CLIENTE, nunca do restaurante
+
+### 10.9 Banco de Dados (PostgreSQL)
+
+```sql
+-- Tabela principal de conversas
+conversations (
+    id UUID PRIMARY KEY,
+    restaurant_id UUID NOT NULL,
+    customer_phone VARCHAR(20) NOT NULL,
+    customer_name VARCHAR(255),
+    is_ai_active BOOLEAN DEFAULT true,  -- false = operador humano assumiu
+    ai_disabled_until TIMESTAMP,         -- quando a IA pode voltar
+    ai_disabled_reason VARCHAR(100),
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+)
+
+-- Para reativar IA de um cliente:
+UPDATE conversations SET is_ai_active = true, ai_disabled_until = NULL WHERE customer_phone = 'NUMERO';
+```
+
+### 10.10 Redis Keys
+
+```
+tacto:sent_msg_id:{instance}:{message_id}  → TTL 300s (rastreia message_id)
+tacto:sent_msg_num:{instance}:{phone}      → TTL 15s (rastreia phone para echo)
+tacto:msg_buffer:{instance}:{phone}        → TTL 30s (buffer de mensagens)
+tacto:msg_lock:{instance}:{phone}          → TTL 10s (lock do buffer)
+```
