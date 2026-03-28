@@ -12,7 +12,8 @@ Automation Levels:
 
 from tacto.domain.ai.agents.base_agent import BaseAgent, AgentResponse
 from tacto.domain.ai.agents.level1_agent import Level1Agent
-from tacto.domain.ai.memory.memory_manager import MemoryManager, ConversationMemory
+from tacto.domain.customer_memory.value_objects.memory_entry import ConversationMemory
+from tacto.application.services.memory_orchestration_service import MemoryManager
 
 __all__ = [
     "BaseAgent",

@@ -22,7 +22,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from tacto.config import get_settings
 from tacto.domain.ai.agents.base_agent import AgentContext, AgentResponse, BaseAgent
-from tacto.domain.ai.memory.memory_manager import ConversationMemory, MemoryManager
+from tacto.domain.customer_memory.value_objects.memory_entry import ConversationMemory
+from tacto.application.services.memory_orchestration_service import MemoryManager
 from tacto.domain.ai.prompts.level1_prompts import Level1Prompts
 from tacto.domain.shared.result import Err, Failure, Ok, Success
 

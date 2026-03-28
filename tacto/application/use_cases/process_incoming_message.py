@@ -13,7 +13,7 @@ from tacto.application.dto.message_dto import IncomingMessageDTO, MessageRespons
 from tacto.config.settings import get_settings
 from tacto.domain.ai.agents.base_agent import AgentContext, BaseAgent
 from tacto.domain.ai.agents.level1_agent import Level1Agent
-from tacto.domain.ai.memory.memory_manager import MemoryManager
+from tacto.application.services.memory_orchestration_service import MemoryManager
 from tacto.domain.assistant.ports.embedding_client import EmbeddingClient
 from tacto.domain.assistant.ports.menu_provider import MenuProvider
 from tacto.domain.assistant.ports.messaging_client import MessagingClient

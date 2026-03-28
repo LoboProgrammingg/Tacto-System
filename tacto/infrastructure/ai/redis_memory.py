@@ -11,7 +11,8 @@ from uuid import UUID
 
 import structlog
 
-from tacto.domain.ai.memory.memory_manager import MemoryEntry, MemoryPort, MemoryType
+from tacto.domain.customer_memory.value_objects.memory_entry import MemoryEntry, MemoryType
+from tacto.domain.customer_memory.ports.memory_port import MemoryPort
 from tacto.domain.shared.result import Err, Failure, Ok, Success
 from tacto.infrastructure.redis.redis_client import RedisClient
 

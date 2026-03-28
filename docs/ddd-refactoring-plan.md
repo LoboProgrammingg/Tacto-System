@@ -244,35 +244,41 @@ tacto/
 
 ## 6. Plano de Execução Faseado
 
-### FASE 1 — Limpeza de Dead Code (Risco: Baixíssimo)
-**Critério:** Não altera nenhum comportamento existente.
+### FASE 1 — Limpeza de Dead Code (Risco: Baixíssimo) ✅ COMPLETA
+**Status:** Concluída em 2026-03-28 | **Commit:** `01f6d3a`
+**Resultado:** 21 arquivos alterados, 1119 linhas de dead code removidas.
 
 ```bash
-# Verificações OBRIGATÓRIAS antes de qualquer deleção
+# Verificações executadas antes das deleções
 grep -r "response_orchestrator\|assistant_service\|BasicStrategy" tacto/ --include="*.py"
 grep -r "from tacto.domain.memory" tacto/ --include="*.py"
 grep -r "message_buffer_service" tacto/domain/ --include="*.py"
 grep -r "from tacto.infrastructure.persistence.postgres" tacto/ --include="*.py"
 ```
 
-- [ ] Deletar `domain/assistant/strategies/`
-- [ ] Deletar `domain/assistant/services/assistant_service.py`
-- [ ] Deletar `domain/assistant/services/response_orchestrator.py`
-- [ ] Deletar `domain/memory/` (pasta inteira)
-- [ ] Deletar `domain/messaging/services/message_buffer_service.py`
-- [ ] Deletar `infrastructure/persistence/postgres/`
-- [ ] Deletar arquivos de rascunho da raiz
-- [ ] **Checkpoint:** container sobe, fluxo de mensagem funciona
+- [x] Deletar `domain/assistant/strategies/`
+- [x] Deletar `domain/assistant/services/assistant_service.py`
+- [x] Deletar `domain/assistant/services/response_orchestrator.py`
+- [x] Deletar `domain/assistant/services/intent_detection_service.py`
+- [x] Deletar `domain/memory/` (pasta inteira)
+- [x] Deletar `domain/messaging/services/message_buffer_service.py`
+- [x] Deletar `infrastructure/persistence/postgres/`
+- [x] Deletar `infrastructure/redis/message_buffer.py` (dead code adicional descoberto)
+- [x] Limpar `__init__.py` com imports quebrados
+- [x] Limpar `container.py` (remover import não usado)
+- [x] **Checkpoint:** Container sobe, fluxo de mensagem testado e funcionando
 
-### FASE 2 — Expulsar MemoryManager do Domínio (Risco: Médio)
+### FASE 2 — Expulsar MemoryManager do Domínio (Risco: Médio) ✅ COMPLETA
+**Status:** Concluída em 2026-03-28
 **Objetivo:** Zero orquestração de I/O na camada de domínio.
 
-- [ ] Criar `domain/customer_memory/value_objects/memory_entry.py` — extrair `MemoryEntry` e `ConversationMemory` como VOs puros
-- [ ] Criar `domain/customer_memory/ports/memory_port.py` — extrair `MemoryPort` com assinatura limpa (sem `dict`, sem menção a Redis)
-- [ ] Criar `application/services/memory_orchestration_service.py` — mover `MemoryManager` para cá
-- [ ] Atualizar `Level1Agent` e `dependencies.py` para receber `MemoryOrchestrationService`
-- [ ] Deletar `domain/ai/memory/memory_manager.py`
-- [ ] **Checkpoint:** memória persiste, container estável
+- [x] Criar `domain/customer_memory/value_objects/memory_entry.py` — `MemoryEntry`, `MemoryType`, `ConversationMemory` (VOs puros)
+- [x] Criar `domain/customer_memory/ports/memory_port.py` — `MemoryPort` interface pura
+- [x] Criar `application/services/memory_orchestration_service.py` — `MemoryManager` movido para cá
+- [x] Atualizar imports em `redis_memory.py`, `postgres_memory.py`, `process_incoming_message.py`, `level1_agent.py`
+- [x] Atualizar `domain/ai/memory/__init__.py` e `domain/ai/__init__.py` para re-exportar do novo local (backward compat)
+- [x] Deletar `domain/ai/memory/memory_manager.py`
+- [x] **Checkpoint:** Container sobe, aguardando teste de fluxo
 
 ### FASE 3 — Expulsar Execução de Agentes do Domínio (Risco: Médio)
 **Objetivo:** Zero chamadas de rede na camada de domínio.
