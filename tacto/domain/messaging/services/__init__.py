@@ -1,11 +1,3 @@
-"""Messaging Domain Services."""
+"""Messaging Domain Services — buffer service moved to application/services/."""
 
-from tacto.domain.messaging.services.message_buffer_service import (
-    MessageBufferService,
-    BufferedMessage,
-)
-
-__all__ = [
-    "MessageBufferService",
-    "BufferedMessage",
-]
+__all__: list[str] = []

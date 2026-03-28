@@ -9,7 +9,6 @@ from typing import Optional
 
 from tacto.config import Settings, get_settings
 from tacto.domain.assistant.ports.ai_client import AIClient
-from tacto.domain.assistant.services.response_orchestrator import ResponseOrchestrator
 from tacto.infrastructure.ai.gemini_client import GeminiClient
 from tacto.infrastructure.external.tacto_client import TactoClient
 from tacto.infrastructure.messaging.join_client import JoinClient
@@ -31,7 +30,6 @@ class Container:
     gemini_client: GeminiClient
     join_client: JoinClient
     tacto_client: TactoClient
-    response_orchestrator: Optional[ResponseOrchestrator] = None
 
     @classmethod
     def create(cls, settings: Optional[Settings] = None) -> "Container":

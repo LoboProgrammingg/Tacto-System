@@ -1,11 +1,3 @@
-"""Assistant domain services."""
+"""Assistant domain services — all removed as dead code during DDD refactoring."""
 
-from tacto.domain.assistant.services.response_orchestrator import (
-    OrchestratorResult,
-    ResponseOrchestrator,
-)
-
-__all__ = [
-    "ResponseOrchestrator",
-    "OrchestratorResult",
-]
+__all__: list[str] = []
