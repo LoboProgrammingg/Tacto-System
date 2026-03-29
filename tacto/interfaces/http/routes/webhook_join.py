@@ -21,22 +21,15 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Request, status
-from pydantic import BaseModel
 
 from tacto.application.dto.message_dto import IncomingMessageDTO
 from tacto.application.services.message_buffer_service import MessageBufferService
 from tacto.infrastructure.messaging.instance_phone_cache import InstancePhoneCache
+from tacto.interfaces.http.schemas.webhook import WebhookResponse
 
 
 logger = structlog.get_logger()
 router = APIRouter()
-
-
-class WebhookResponse(BaseModel):
-    """Standardized response returned to Join (always HTTP 200)."""
-
-    success: bool
-    message: str = "OK"
 
 
 # ── Webhook Entry Point ────────────────────────────────────────────────────────

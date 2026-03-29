@@ -5,68 +5,23 @@ Endpoints for managing WhatsApp instances via Join Developer API.
 All credentials come from environment variables (JOIN_TOKEN_CLIENTE, JOIN_API_BASE_URL).
 """
 
-from typing import Optional
-from uuid import UUID
-
 import structlog
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
 
 from tacto.domain.shared.result import Failure
 from tacto.infrastructure.messaging.join_instance_manager import JoinInstanceManager
+from tacto.interfaces.http.schemas.instance import (
+    ConfigureWebhookRequest,
+    ConnectInstanceRequest,
+    CreateInstanceRequest,
+    InstanceListResponse,
+    InstanceResponse,
+    QRCodeResponse,
+)
 
 
 logger = structlog.get_logger()
 router = APIRouter()
-
-
-class CreateInstanceRequest(BaseModel):
-    """Request to create a new instance."""
-
-    instance_name: str = Field(..., min_length=3, max_length=100)
-
-
-class ConnectInstanceRequest(BaseModel):
-    """Request to connect instance to restaurant."""
-
-    restaurant_id: UUID
-    instance_key: str = Field(..., alias="instancia")
-
-    class Config:
-        populate_by_name = True
-
-
-class ConfigureWebhookRequest(BaseModel):
-    """Request to configure webhook URL."""
-
-    instance_key: str
-    webhook_url: str = Field(..., pattern=r"^https?://")
-    events: Optional[list[str]] = None
-
-
-class InstanceResponse(BaseModel):
-    """Instance response model. instance_name is not returned — list shows all instances."""
-
-    instance_key: str
-    status: str
-    phone_number: Optional[str] = None
-    webhook_url: Optional[str] = None
-    is_connected: bool = False
-
-
-class QRCodeResponse(BaseModel):
-    """QR Code response model."""
-
-    qr_code: str
-    instance_key: str
-    expires_in: int = 60
-
-
-class InstanceListResponse(BaseModel):
-    """List of instances response."""
-
-    instances: list[InstanceResponse]
-    total: int
 
 
 def _to_response(instance) -> InstanceResponse:

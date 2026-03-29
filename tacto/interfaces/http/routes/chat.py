@@ -12,15 +12,14 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
 
 from tacto.domain.ai_assistance.value_objects.agent_context import AgentContext
-from tacto.infrastructure.agents.level1_agent import Level1Agent
 from tacto.domain.messaging.entities.conversation import Conversation
 from tacto.domain.messaging.entities.message import Message
 from tacto.domain.messaging.value_objects.message_source import MessageSource
 from tacto.domain.shared.result import Failure
 from tacto.domain.shared.value_objects import PhoneNumber, RestaurantId
+from tacto.infrastructure.agents.level1_agent import Level1Agent
 from tacto.infrastructure.database.connection import get_async_session
 from tacto.infrastructure.persistence.conversation_repository import (
     PostgresConversationRepository,
@@ -31,33 +30,11 @@ from tacto.infrastructure.persistence.message_repository import (
 from tacto.infrastructure.persistence.restaurant_repository import (
     PostgresRestaurantRepository,
 )
+from tacto.interfaces.http.schemas.chat import ChatMessage, ChatRequest, ChatResponse
 
 
 logger = structlog.get_logger()
 router = APIRouter()
-
-
-class ChatRequest(BaseModel):
-    restaurant_id: UUID = Field(..., description="Restaurant UUID")
-    message: str = Field(..., min_length=1, max_length=4096)
-    customer_phone: str = Field(
-        default="5511999999999",
-        description="Simulated phone — keeps conversation context across calls",
-    )
-    customer_name: str | None = Field(default=None)
-
-
-class ChatMessage(BaseModel):
-    role: str  # "user" | "assistant"
-    content: str
-
-
-class ChatResponse(BaseModel):
-    response: str
-    restaurant_name: str
-    conversation_id: str
-    processing_time_ms: int
-    history: list[ChatMessage]
 
 
 @router.post(
