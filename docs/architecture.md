@@ -1,7 +1,8 @@
 # 🏛️ TactoFlow - Arquitetura DDD Detalhada
 
-**Versão:** 0.0.1  
-**Última Atualização:** 2026-03-27  
+**Versão:** 1.0.0  
+**Última Atualização:** 2026-03-29  
+**Status:** ✅ Refatoração DDD Completa (ADR-005 Implemented)  
 **Baseado em:** Domain-Driven Design (Eric Evans) + Clean Architecture (Uncle Bob)
 
 ---
@@ -71,6 +72,37 @@
 
 ## 🏗️ CAMADAS DA ARQUITETURA
 
+### 0️⃣ Shared Kernel (Camada Compartilhada)
+
+**Localização:** `tacto/shared/`
+
+**Responsabilidade:** Conceitos compartilhados entre todas as camadas (DDD Shared Kernel pattern)
+
+**Conteúdo:**
+```
+shared/
+├── domain/                          # Value Objects, Events, Exceptions
+│   ├── value_objects/
+│   │   ├── base.py                  # ValueObject abstract base
+│   │   ├── identifiers.py           # EntityId, RestaurantId, ConversationId, etc.
+│   │   └── phone_number.py
+│   ├── events/
+│   │   └── domain_event.py          # DomainEvent base class
+│   └── exceptions.py                # DomainException hierarchy
+│
+├── application/                     # Result types for error handling
+│   └── result.py                    # Result<T, E>, Ok, Err, Success, Failure
+│
+└── infrastructure/                  # (placeholder for future shared infra)
+```
+
+**Regras:**
+- ✅ Não depende de nenhuma outra camada
+- ✅ Pode ser importado por qualquer camada
+- ✅ Contém apenas conceitos cross-cutting
+
+---
+
 ### 1️⃣ Domain Layer (Camada de Domínio)
 
 **Localização:** `tacto/domain/`
@@ -88,9 +120,11 @@ domain/
 │   │   ├── integration_type.py
 │   │   ├── automation_type.py
 │   │   └── opening_hours.py
+│   ├── events/
+│   │   └── restaurant_created.py
 │   ├── services/
 │   │   └── opening_hours_validator.py
-│   └── repository.py              # Interface apenas
+│   └── repository.py              # Interface apenas (ABC)
 │
 ├── messaging/
 │   ├── entities/
@@ -99,39 +133,25 @@ domain/
 │   ├── value_objects/
 │   │   ├── message_status.py
 │   │   └── message_source.py
-│   ├── services/
-│   │   └── message_buffer_service.py
-│   └── repository.py
+│   ├── events/
+│   │   ├── message_received.py
+│   │   ├── ai_enabled.py
+│   │   └── ai_disabled.py
+│   └── repository.py              # Interface apenas (ABC)
 │
-├── assistant/
-│   ├── services/
-│   │   ├── assistant_service.py
-│   │   ├── response_orchestrator.py
-│   │   └── intent_detection_service.py
-│   └── strategies/
-│       ├── base_strategy.py       # Abstract
-│       ├── basic_strategy.py
-│       ├── intermediate_strategy.py
-│       └── advanced_strategy.py
+├── ai_assistance/
+│   └── value_objects/
+│       └── agent_context.py
 │
-├── memory/
-│   ├── entities/
-│   │   └── conversation_memory.py
-│   ├── services/
-│   │   └── memory_service.py
-│   └── repository.py
+├── customer_memory/
+│   └── ports/
+│       └── memory_port.py
 │
-├── order/                         # FUTURO
-│   ├── entities/
-│   │   ├── order.py               # Aggregate Root
-│   │   └── order_item.py
-│   └── repository.py
-│
-└── shared/
-    ├── value_objects/
-    │   ├── phone_number.py
-    │   └── tenant_id.py
-    └── result.py                  # Result<T, E> monad
+└── order/                         # FUTURO
+    ├── entities/
+    │   ├── order.py               # Aggregate Root
+    │   └── order_item.py
+    └── repository.py
 ```
 
 **Regras:**
@@ -147,44 +167,41 @@ domain/
 
 **Localização:** `tacto/application/`
 
-**Responsabilidade:** Orquestrar casos de uso, coordenar domain services
+**Responsabilidade:** Orquestrar casos de uso, coordenar domain services, definir interfaces (ports)
 
 **Conteúdo:**
 ```
 application/
+├── ports/                               # ✅ NOVO: Interfaces para Infrastructure
+│   ├── agent_port.py                    # BaseAgent abstract interface
+│   ├── ai_client.py                     # AIClient, AIRequest, AIResponse
+│   ├── embedding_client.py              # EmbeddingClient interface
+│   ├── menu_provider.py                 # MenuProvider, MenuItem, MenuData
+│   ├── messaging_client.py              # MessagingClient, SendMessageResult
+│   └── vector_store.py                  # VectorStore interface
+│
 ├── use_cases/
-│   ├── restaurant/
-│   │   ├── create_restaurant.py
-│   │   ├── update_restaurant.py
-│   │   └── get_restaurant.py
-│   │
-│   ├── messaging/
-│   │   ├── process_incoming_message.py    # CORE
-│   │   ├── send_message.py
-│   │   └── get_conversation_history.py
-│   │
-│   ├── assistant/
-│   │   └── generate_response.py
-│   │
-│   └── memory/
-│       ├── store_memory.py
-│       └── retrieve_context.py
+│   ├── create_restaurant.py
+│   ├── process_incoming_message.py      # CORE
+│   ├── sync_tacto_menu.py
+│   └── fetch_tacto_restaurant_data.py
 │
 ├── dto/
 │   ├── restaurant_dto.py
-│   ├── message_dto.py
-│   └── response_dto.py
+│   └── message_dto.py
 │
 └── services/
-    └── application_coordinator.py
+    ├── message_buffer_service.py
+    └── memory_orchestration_service.py
 ```
 
 **Características:**
+- **Ports (interfaces)**: Define contratos que Infrastructure deve implementar
 - Recebe DTOs da interface layer
 - Converte DTOs em domain objects
 - Chama domain services e repositories
 - Retorna Results com sucesso/erro
-- **Transaction boundary** (se aplicável)
+- **Dependency Inversion**: Application define interfaces, Infrastructure implementa
 
 ---
 
@@ -192,67 +209,49 @@ application/
 
 **Localização:** `tacto/infrastructure/`
 
-**Responsabilidade:** Implementar detalhes técnicos
+**Responsabilidade:** Implementar detalhes técnicos e contratos definidos em application/ports
 
 **Conteúdo:**
 ```
 infrastructure/
+├── ai/
+│   ├── prompts/                       # ✅ NOVO: AI prompt templates
+│   │   └── level1_prompts.py          # Level1Prompts (humanized responses)
+│   ├── gemini_client.py               # Implements AIClient, EmbeddingClient
+│   ├── postgres_memory.py             # PostgreSQL-based memory
+│   └── redis_memory.py                # Redis-based short-term memory
+│
+├── agents/
+│   └── level1_agent.py                # Implements BaseAgent
+│
 ├── persistence/
-│   ├── postgres/
-│   │   ├── models/                    # SQLAlchemy models
-│   │   │   ├── restaurant_model.py
-│   │   │   ├── conversation_model.py
-│   │   │   └── message_model.py
-│   │   ├── repositories/
-│   │   │   ├── restaurant_repository.py
-│   │   │   ├── messaging_repository.py
-│   │   │   └── memory_repository.py
-│   │   └── database.py                # Connection pool
-│   │
+│   ├── restaurant_repository.py       # Implements RestaurantRepository
+│   ├── conversation_repository.py     # Implements ConversationRepository
+│   └── message_repository.py          # Implements MessageRepository
+│
+├── database/
+│   ├── connection.py                  # Async session management
+│   ├── models.py                      # SQLAlchemy models
+│   ├── pgvector_store.py              # Implements VectorStore
 │   └── migrations/                    # Alembic
 │       └── versions/
 │
-├── cache/
-│   └── redis/
-│       ├── redis_client.py
-│       ├── message_buffer_cache.py
-│       └── token_cache.py
+├── external/
+│   ├── tacto_client.py                # Tacto External API client
+│   └── tacto_menu_provider.py         # Implements MenuProvider
 │
-├── vector_store/
-│   └── pgvector/
-│       ├── pgvector_store.py
-│       └── embedding_service.py
+├── messaging/
+│   ├── join_client.py                 # Implements MessagingClient
+│   ├── join_instance_manager.py       # WhatsApp instance management
+│   └── instance_phone_cache.py
 │
-├── external_apis/
-│   ├── tacto/
-│   │   ├── tacto_client.py
-│   │   ├── oauth2_handler.py
-│   │   ├── menu_service.py
-│   │   └── institutional_service.py
-│   │
-│   └── join/
-│       ├── join_client.py
-│       ├── webhook_parser.py
-│       └── message_sender.py
-│
-├── ai/
-│   ├── gemini/
-│   │   ├── gemini_client.py
-│   │   ├── embedding_generator.py
-│   │   └── prompt_builder.py
-│   │
-│   └── rag/
-│       ├── rag_pipeline.py
-│       └── context_retriever.py
-│
-└── config/
-    ├── settings.py                    # Pydantic Settings
-    └── logging_config.py
+└── redis/
+    └── redis_client.py                # Redis connection
 ```
 
 **Regras:**
-- ✅ Implementa interfaces do domínio
-- ✅ Conhece frameworks (SQLAlchemy, Redis, etc.)
+- ✅ Implementa interfaces definidas em application/ports
+- ✅ Conhece frameworks (SQLAlchemy, Redis, httpx, etc.)
 - ✅ Faz I/O (HTTP, DB, file system)
 - ❌ NÃO contém lógica de negócio
 
@@ -262,33 +261,31 @@ infrastructure/
 
 **Localização:** `tacto/interfaces/`
 
-**Responsabilidade:** Expor funcionalidades para o mundo externo
+**Responsabilidade:** Expor funcionalidades para o mundo externo (HTTP, CLI, Workers)
 
 **Conteúdo:**
 ```
 interfaces/
 ├── http/
-│   ├── api/
-│   │   └── v1/
-│   │       ├── restaurants.py         # CRUD restaurantes
-│   │       ├── conversations.py       # Histórico conversas
-│   │       └── admin.py               # Endpoints admin
+│   ├── schemas/                       # ✅ NOVO: Pydantic API models
+│   │   ├── restaurant.py              # CreateRestaurantRequest, RestaurantResponse, etc.
+│   │   ├── chat.py                    # ChatRequest, ChatResponse
+│   │   ├── instance.py                # InstanceResponse, QRCodeResponse
+│   │   └── webhook.py                 # WebhookResponse
 │   │
-│   ├── webhooks/
-│   │   └── join_webhook.py            # Receber msgs Join
+│   ├── routes/
+│   │   ├── restaurants.py             # CRUD restaurantes + Tacto sync
+│   │   ├── chat.py                    # AI chat test endpoint
+│   │   ├── instances.py               # WhatsApp instance management
+│   │   └── webhook_join.py            # Join webhook handler
 │   │
-│   ├── middleware/
-│   │   ├── tenant_middleware.py       # Injetar restaurant_id
+│   ├── middlewares/
+│   │   ├── logging.py
 │   │   └── error_handler.py
 │   │
-│   └── dependencies.py                # FastAPI dependencies
+│   └── dependencies.py                # FastAPI dependencies (DI)
 │
-├── workers/
-│   ├── message_worker.py              # Processar fila de msgs
-│   └── memory_indexer.py              # Indexar embeddings
-│
-└── cli/                               # Se necessário
-    └── admin_cli.py
+└── cli/                               # (futuro)
 ```
 
 ---

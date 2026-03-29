@@ -1,8 +1,8 @@
 # Tacto-System — Contexto Geral do Projeto
 
-**Versão:** 1.0.0
-**Última Atualização:** 2026-03-28
-**Status:** ✅ Sistema Funcional — Refactoring DDD Completo (5 Fases)
+**Versão:** 1.1.0  
+**Última Atualização:** 2026-03-29  
+**Status:** ✅ Sistema Funcional — Refatoração DDD Completa (ADR-005 Implemented)  
 **Metodologias:** DDD (Eric Evans), Clean Architecture, SOLID, KISS, Clean Code
 
 ---
