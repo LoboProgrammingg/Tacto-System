@@ -1,14 +1,24 @@
-from tacto.domain.ai_assistance.ports.agent_port import BaseAgent
-from tacto.domain.ai_assistance.ports.ai_client import AIClient, AIRequest, AIResponse
-from tacto.domain.ai_assistance.ports.embedding_client import EmbeddingClient
-from tacto.domain.ai_assistance.ports.menu_provider import (
+"""
+AI Assistance Ports.
+
+SHIM: Re-exports from tacto.application.ports for backward compatibility.
+New code should import directly from tacto.application.ports.
+"""
+
+from tacto.application.ports import (
+    AIClient,
+    AIRequest,
+    AIResponse,
+    BaseAgent,
+    EmbeddingClient,
     InstitutionalData,
     MenuData,
     MenuItem,
     MenuProvider,
+    MessagingClient,
+    SendMessageResult,
+    VectorStore,
 )
-from tacto.domain.ai_assistance.ports.messaging_client import MessagingClient, SendMessageResult
-from tacto.domain.ai_assistance.ports.vector_store import VectorStore
 
 __all__ = [
     "BaseAgent",
