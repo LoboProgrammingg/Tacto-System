@@ -12,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tacto.domain.messaging.entities.conversation import Conversation
 from tacto.domain.messaging.repository import ConversationRepository
-from tacto.domain.shared.result import Err, Failure, Ok, Success
-from tacto.domain.shared.value_objects import ConversationId, PhoneNumber, RestaurantId
+from tacto.shared.application import Err, Failure, Ok, Success
+from tacto.shared.domain.value_objects import ConversationId, PhoneNumber, RestaurantId
 from tacto.infrastructure.database.models.conversation import ConversationModel
 
 

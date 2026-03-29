@@ -8,7 +8,7 @@ Consumidores potenciais: analytics, notificações, auditoria.
 from dataclasses import dataclass
 from uuid import UUID
 
-from tacto.domain.shared.events.domain_event import DomainEvent
+from tacto.shared.domain.events.domain_event import DomainEvent
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -17,8 +17,8 @@ from tacto.domain.ai_assistance.value_objects.agent_context import AgentContext
 from tacto.domain.messaging.entities.conversation import Conversation
 from tacto.domain.messaging.entities.message import Message
 from tacto.domain.messaging.value_objects.message_source import MessageSource
-from tacto.domain.shared.result import Failure
-from tacto.domain.shared.value_objects import PhoneNumber, RestaurantId
+from tacto.shared.application import Failure
+from tacto.shared.domain.value_objects import PhoneNumber, RestaurantId
 from tacto.infrastructure.agents.level1_agent import Level1Agent
 from tacto.infrastructure.database.connection import get_async_session
 from tacto.infrastructure.persistence.conversation_repository import (

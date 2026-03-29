@@ -13,7 +13,7 @@ import httpx
 import structlog
 
 from tacto.config import TactoAPISettings, get_settings
-from tacto.domain.shared.result import Err, Failure, Ok, Success
+from tacto.shared.application import Err, Failure, Ok, Success
 from tacto.infrastructure.circuit_breaker import CircuitBreaker, CircuitOpenError
 
 

@@ -20,8 +20,8 @@ import httpx
 import structlog
 
 from tacto.config import JoinAPISettings, get_settings
-from tacto.domain.ai_assistance.ports.messaging_client import MessagingClient, SendMessageResult
-from tacto.domain.shared.result import Err, Failure, Ok, Success
+from tacto.application.ports.messaging_client import MessagingClient, SendMessageResult
+from tacto.shared.application import Err, Failure, Ok, Success
 from tacto.infrastructure.circuit_breaker import CircuitBreaker, CircuitOpenError
 from tacto.infrastructure.messaging.sent_message_tracker import SentMessageTracker
 

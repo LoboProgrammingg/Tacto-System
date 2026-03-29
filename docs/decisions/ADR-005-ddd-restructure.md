@@ -1,9 +1,67 @@
 # ADR-005: Reestruturação DDD e Clean Architecture
 
 **Data:** 2026-03-29  
-**Status:** Proposed  
+**Status:** ✅ Implemented  
+**Data de Implementação:** 2026-03-29  
 **Autores:** Engineering Team  
 **Referências:** Eric Evans (DDD), Robert C. Martin (Clean Architecture), Vaughn Vernon (Implementing DDD)
+
+## Implementation Summary
+
+A reestruturação foi implementada com sucesso em 5 commits:
+
+| Commit | Fase | Descrição |
+|--------|------|-----------|
+| `ef17706` | 1 | Criar `shared/` kernel com shims |
+| `221d975` | 2 | Mover ports para `application/ports/` |
+| `b3ba901` | 3 | Mover prompts para `infrastructure/ai/prompts/` |
+| `c28a363` | 4 | Criar `interfaces/http/schemas/` |
+| (final) | 5 | Migrar todos imports e remover shims |
+
+### Estrutura Final Implementada
+
+```
+tacto/
+├── shared/                          # ✅ Shared Kernel
+│   ├── domain/                      # Value Objects, Events, Exceptions
+│   ├── application/                 # Result types (Ok, Err, Success, Failure)
+│   └── infrastructure/              # (placeholder)
+│
+├── application/
+│   ├── ports/                       # ✅ Interfaces para Infrastructure
+│   │   ├── agent_port.py
+│   │   ├── ai_client.py
+│   │   ├── embedding_client.py
+│   │   ├── menu_provider.py
+│   │   ├── messaging_client.py
+│   │   └── vector_store.py
+│   ├── dto/
+│   └── use_cases/
+│
+├── domain/
+│   ├── restaurant/
+│   ├── messaging/
+│   ├── ai_assistance/
+│   └── customer_memory/
+│
+├── infrastructure/
+│   ├── ai/
+│   │   ├── prompts/                 # ✅ Level1Prompts movido para cá
+│   │   ├── gemini_client.py
+│   │   └── ...
+│   └── ...
+│
+└── interfaces/
+    └── http/
+        ├── schemas/                 # ✅ Pydantic API models
+        │   ├── restaurant.py
+        │   ├── chat.py
+        │   ├── instance.py
+        │   └── webhook.py
+        └── routes/
+```
+
+---
 
 ---
 

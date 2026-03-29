@@ -10,8 +10,8 @@ from typing import Optional
 
 from tacto.domain.messaging.entities.conversation import Conversation
 from tacto.domain.messaging.entities.message import Message
-from tacto.domain.shared.result import Failure, Success
-from tacto.domain.shared.value_objects import (
+from tacto.shared.application import Failure, Success
+from tacto.shared.domain.value_objects import (
     ConversationId,
     MessageId,
     PhoneNumber,

@@ -11,14 +11,14 @@ from typing import Callable, Optional
 import structlog
 
 from tacto.config import get_settings
-from tacto.domain.ai_assistance.ports.menu_provider import (
+from tacto.application.ports.menu_provider import (
     InstitutionalData,
     MenuData,
     MenuItem,
     MenuProvider,
 )
-from tacto.domain.shared.result import Err, Failure, Ok, Success
-from tacto.domain.shared.value_objects import RestaurantId
+from tacto.shared.application import Err, Failure, Ok, Success
+from tacto.shared.domain.value_objects import RestaurantId
 from tacto.infrastructure.external.tacto_client import TactoClient
 from tacto.infrastructure.redis.redis_client import RedisClient
 

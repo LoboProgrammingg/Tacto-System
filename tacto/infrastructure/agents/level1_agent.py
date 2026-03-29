@@ -23,12 +23,12 @@ from langchain_core.runnables import RunnableConfig
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from tacto.config import get_settings
-from tacto.domain.ai_assistance.ports.agent_port import BaseAgent
+from tacto.application.ports.agent_port import BaseAgent
 from tacto.domain.ai_assistance.value_objects.agent_context import AgentContext
 from tacto.domain.ai_assistance.value_objects.agent_response import AgentResponse
-from tacto.domain.ai_assistance.prompts.level1_prompts import Level1Prompts
+from tacto.infrastructure.ai.prompts.level1_prompts import Level1Prompts
 from tacto.application.services.memory_orchestration_service import MemoryManager
-from tacto.domain.shared.result import Err, Failure, Ok, Success
+from tacto.shared.application import Err, Failure, Ok, Success
 
 
 logger = structlog.get_logger()

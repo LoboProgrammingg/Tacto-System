@@ -8,7 +8,7 @@ All credentials come from environment variables (JOIN_TOKEN_CLIENTE, JOIN_API_BA
 import structlog
 from fastapi import APIRouter, HTTPException, status
 
-from tacto.domain.shared.result import Failure
+from tacto.shared.application import Failure
 from tacto.infrastructure.messaging.join_instance_manager import JoinInstanceManager
 from tacto.interfaces.http.schemas.instance import (
     ConfigureWebhookRequest,
@@ -152,7 +152,7 @@ async def connect_to_restaurant(request: ConnectInstanceRequest) -> dict:
     Updates canal_master_id on the restaurant so incoming webhooks from
     this instance are routed to the correct restaurant's AI pipeline.
     """
-    from tacto.domain.shared.value_objects import RestaurantId
+    from tacto.shared.domain.value_objects import RestaurantId
     from tacto.infrastructure.database.connection import get_async_session
     from tacto.infrastructure.persistence.restaurant_repository import (
         PostgresRestaurantRepository,

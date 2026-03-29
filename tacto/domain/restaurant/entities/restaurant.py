@@ -16,9 +16,9 @@ from tacto.domain.restaurant.events.restaurant_created import RestaurantCreated
 from tacto.domain.restaurant.value_objects.automation_type import AutomationType
 from tacto.domain.restaurant.value_objects.integration_type import IntegrationType
 from tacto.domain.restaurant.value_objects.opening_hours import OpeningHours
-from tacto.domain.shared.events.domain_event import DomainEvent
-from tacto.domain.shared.exceptions import BusinessRuleViolationError, ValidationError
-from tacto.domain.shared.value_objects import RestaurantId
+from tacto.shared.domain.events.domain_event import DomainEvent
+from tacto.shared.domain.exceptions import BusinessRuleViolationError, ValidationError
+from tacto.shared.domain.value_objects import RestaurantId
 
 
 @dataclass

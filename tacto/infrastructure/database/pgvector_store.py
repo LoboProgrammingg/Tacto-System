@@ -13,8 +13,8 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tacto.domain.ai_assistance.ports.vector_store import VectorStore
-from tacto.domain.shared.result import Err, Failure, Ok, Success
+from tacto.application.ports.vector_store import VectorStore
+from tacto.shared.application import Err, Failure, Ok, Success
 
 
 logger = structlog.get_logger()

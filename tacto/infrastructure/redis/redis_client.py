@@ -11,7 +11,7 @@ from typing import Any, Optional
 import redis.asyncio as redis
 
 from tacto.config import RedisSettings, get_settings
-from tacto.domain.shared.result import Err, Failure, Ok, Success
+from tacto.shared.application import Err, Failure, Ok, Success
 
 
 class RedisClient:

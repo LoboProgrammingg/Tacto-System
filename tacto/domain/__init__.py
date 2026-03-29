@@ -1,22 +1,24 @@
 """TactoFlow Domain Layer."""
 
-from tacto.domain.shared import (
+from tacto.shared.application import (
+    Err,
+    Failure,
+    Ok,
+    Result,
+    ResultUtils,
+    Success,
+)
+from tacto.shared.domain import (
     BusinessRuleViolationError,
     ConversationId,
     DomainException,
     EntityId,
     EntityNotFoundError,
-    Err,
-    Failure,
     InvalidOperationError,
     MessageId,
-    Ok,
     OrderId,
     PhoneNumber,
     RestaurantId,
-    Result,
-    ResultUtils,
-    Success,
     ValidationError,
     ValueObject,
 )

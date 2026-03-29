@@ -84,7 +84,7 @@ async def create_restaurant(
 )
 async def list_restaurants() -> RestaurantListResponse:
     """List all active restaurants."""
-    from tacto.domain.shared.result import Failure
+    from tacto.shared.application import Failure
     from tacto.infrastructure.database.connection import get_async_session
     from tacto.infrastructure.persistence.restaurant_repository import (
         PostgresRestaurantRepository,
@@ -127,8 +127,8 @@ async def list_restaurants() -> RestaurantListResponse:
 )
 async def get_restaurant(restaurant_id: UUID) -> RestaurantResponse:
     """Get restaurant by ID."""
-    from tacto.domain.shared.result import Failure
-    from tacto.domain.shared.value_objects import RestaurantId
+    from tacto.shared.application import Failure
+    from tacto.shared.domain.value_objects import RestaurantId
     from tacto.infrastructure.database.connection import get_async_session
     from tacto.infrastructure.persistence.restaurant_repository import (
         PostgresRestaurantRepository,
@@ -176,7 +176,7 @@ async def sync_tacto_menu(
     request: Request,
 ) -> TactoSyncResponse:
     """Generate embeddings from Tacto menu and save to pgvector."""
-    from tacto.domain.shared.result import Failure
+    from tacto.shared.application import Failure
     from tacto.infrastructure.database.connection import get_async_session
     from tacto.infrastructure.external.tacto_client import TactoClient
     from tacto.infrastructure.external.tacto_menu_provider import TactoMenuProvider
@@ -231,8 +231,8 @@ async def fetch_tacto_restaurant_data(
     force_refresh: bool = Query(default=False, description="Bypass Redis cache and fetch fresh data from Tacto"),
 ) -> TactoRestaurantDataResponse:
     """Fetch full restaurant data from Tacto External API."""
-    from tacto.domain.shared.result import Failure
-    from tacto.domain.shared.value_objects import RestaurantId
+    from tacto.shared.application import Failure
+    from tacto.shared.domain.value_objects import RestaurantId
     from tacto.infrastructure.database.connection import get_async_session
     from tacto.infrastructure.external.tacto_client import TactoClient
     from tacto.infrastructure.external.tacto_menu_provider import TactoMenuProvider

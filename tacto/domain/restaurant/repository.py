@@ -9,8 +9,8 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from tacto.domain.restaurant.entities.restaurant import Restaurant
-from tacto.domain.shared.result import Failure, Success
-from tacto.domain.shared.value_objects import RestaurantId
+from tacto.shared.application import Failure, Success
+from tacto.shared.domain.value_objects import RestaurantId
 
 
 class RestaurantRepository(ABC):

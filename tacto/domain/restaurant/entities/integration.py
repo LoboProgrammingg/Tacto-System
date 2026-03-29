@@ -13,8 +13,8 @@ from typing import Any, Optional
 from uuid import UUID, uuid4
 
 from tacto.domain.restaurant.value_objects.integration_type import IntegrationType
-from tacto.domain.shared.exceptions import ValidationError
-from tacto.domain.shared.value_objects import RestaurantId
+from tacto.shared.domain.exceptions import ValidationError
+from tacto.shared.domain.value_objects import RestaurantId
 
 
 @dataclass

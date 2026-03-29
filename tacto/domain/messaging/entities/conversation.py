@@ -16,9 +16,9 @@ if TYPE_CHECKING:
 from tacto.domain.messaging.events.ai_disabled import AIDisabled
 from tacto.domain.messaging.events.ai_enabled import AIEnabled
 from tacto.domain.messaging.events.message_received import MessageReceived
-from tacto.domain.shared.events.domain_event import DomainEvent
-from tacto.domain.shared.exceptions import BusinessRuleViolationError
-from tacto.domain.shared.value_objects import ConversationId, PhoneNumber, RestaurantId
+from tacto.shared.domain.events.domain_event import DomainEvent
+from tacto.shared.domain.exceptions import BusinessRuleViolationError
+from tacto.shared.domain.value_objects import ConversationId, PhoneNumber, RestaurantId
 
 
 _DEFAULT_AI_DISABLE_DURATION_HOURS = 12

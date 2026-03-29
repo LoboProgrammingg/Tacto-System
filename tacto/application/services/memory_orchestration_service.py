@@ -19,7 +19,7 @@ from tacto.domain.customer_memory.value_objects.memory_entry import (
     MemoryType,
 )
 from tacto.domain.customer_memory.ports.memory_port import MemoryPort
-from tacto.domain.shared.result import Failure, Success
+from tacto.shared.application import Failure, Success
 
 
 class MemoryOrchestrationService:

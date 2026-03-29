@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
-from tacto.domain.shared.exceptions import ValidationError
+from tacto.shared.domain.exceptions import ValidationError
 
 
 class DayOfWeek(str, Enum):

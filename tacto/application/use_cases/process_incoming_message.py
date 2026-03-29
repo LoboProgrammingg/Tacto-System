@@ -11,20 +11,20 @@ import structlog
 
 from tacto.application.dto.message_dto import IncomingMessageDTO, MessageResponseDTO
 from tacto.config.settings import get_settings
-from tacto.domain.ai_assistance.ports.agent_port import BaseAgent
+from tacto.application.ports.agent_port import BaseAgent
 from tacto.domain.ai_assistance.value_objects.agent_context import AgentContext
 from tacto.application.services.memory_orchestration_service import MemoryManager
-from tacto.domain.ai_assistance.ports.embedding_client import EmbeddingClient
-from tacto.domain.ai_assistance.ports.menu_provider import MenuProvider
-from tacto.domain.ai_assistance.ports.messaging_client import MessagingClient
-from tacto.domain.ai_assistance.ports.vector_store import VectorStore
+from tacto.application.ports.embedding_client import EmbeddingClient
+from tacto.application.ports.menu_provider import MenuProvider
+from tacto.application.ports.messaging_client import MessagingClient
+from tacto.application.ports.vector_store import VectorStore
 from tacto.domain.messaging.entities.conversation import Conversation
 from tacto.domain.messaging.entities.message import Message
 from tacto.domain.messaging.repository import ConversationRepository, MessageRepository
 from tacto.domain.messaging.value_objects.message_source import MessageSource
 from tacto.domain.restaurant.repository import RestaurantRepository
-from tacto.domain.shared.result import Failure, Ok, Success
-from tacto.domain.shared.value_objects import PhoneNumber
+from tacto.shared.application import Failure, Ok, Success
+from tacto.shared.domain.value_objects import PhoneNumber
 
 
 logger = structlog.get_logger()

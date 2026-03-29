@@ -13,8 +13,8 @@ from tacto.domain.restaurant.repository import RestaurantRepository
 from tacto.domain.restaurant.value_objects.automation_type import AutomationType
 from tacto.domain.restaurant.value_objects.integration_type import IntegrationType
 from tacto.domain.restaurant.value_objects.opening_hours import OpeningHours
-from tacto.domain.shared.result import Err, Failure, Ok, Success
-from tacto.domain.shared.value_objects import RestaurantId
+from tacto.shared.application import Err, Failure, Ok, Success
+from tacto.shared.domain.value_objects import RestaurantId
 
 
 class CreateRestaurantUseCase:

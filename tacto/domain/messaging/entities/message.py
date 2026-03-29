@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 from tacto.domain.messaging.value_objects.message_direction import MessageDirection
 from tacto.domain.messaging.value_objects.message_source import MessageSource
-from tacto.domain.shared.value_objects import ConversationId, MessageId
+from tacto.shared.domain.value_objects import ConversationId, MessageId
 
 
 @dataclass
@@ -45,7 +45,7 @@ class Message:
     def __post_init__(self) -> None:
         """Validate invariants."""
         if not self.body or not self.body.strip():
-            from tacto.domain.shared.exceptions import ValidationError
+            from tacto.shared.domain.exceptions import ValidationError
             raise ValidationError(
                 message="Message body cannot be empty",
                 field="body",

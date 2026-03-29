@@ -12,7 +12,7 @@ import httpx
 import structlog
 
 from tacto.config import JoinAPISettings, get_settings
-from tacto.domain.shared.result import Err, Failure, Ok, Success
+from tacto.shared.application import Err, Failure, Ok, Success
 
 
 logger = structlog.get_logger()

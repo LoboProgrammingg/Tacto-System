@@ -14,8 +14,8 @@ from tacto.domain.messaging.entities.message import Message
 from tacto.domain.messaging.repository import MessageRepository
 from tacto.domain.messaging.value_objects.message_direction import MessageDirection
 from tacto.domain.messaging.value_objects.message_source import MessageSource
-from tacto.domain.shared.result import Err, Failure, Ok, Success
-from tacto.domain.shared.value_objects import ConversationId, MessageId
+from tacto.shared.application import Err, Failure, Ok, Success
+from tacto.shared.domain.value_objects import ConversationId, MessageId
 from tacto.infrastructure.database.models.message import MessageModel
 
 
