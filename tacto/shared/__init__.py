@@ -1,14 +1,15 @@
 """
-Shared kernel for TactoFlow domain.
+Shared Kernel — Cross-cutting concerns shared across bounded contexts.
 
-SHIM: This module re-exports from tacto.shared for backward compatibility.
-New code should import directly from tacto.shared.
+This module contains:
+- shared/domain/: Value Objects, Events, Exceptions (domain concepts)
+- shared/application/: Result type, Command/Query base classes
+- shared/infrastructure/: Logging, DateTime helpers
+
+Following DDD (Eric Evans) and Clean Architecture (Uncle Bob).
 """
 
-# Re-export from new location (tacto.shared)
 from tacto.shared.domain import (
-    AuthenticationError,
-    AuthorizationError,
     BusinessRuleViolationError,
     ConversationId,
     DomainEvent,
@@ -20,7 +21,6 @@ from tacto.shared.domain import (
     MessageId,
     OrderId,
     PhoneNumber,
-    RateLimitError,
     RestaurantId,
     ValidationError,
     ValueObject,
@@ -35,26 +35,14 @@ from tacto.shared.application import (
 )
 
 __all__ = [
-    # Exceptions
+    # Domain
     "DomainException",
     "ValidationError",
     "EntityNotFoundError",
     "BusinessRuleViolationError",
     "InvalidOperationError",
     "ExternalServiceError",
-    "AuthenticationError",
-    "AuthorizationError",
-    "RateLimitError",
-    # Events
     "DomainEvent",
-    # Result
-    "Result",
-    "Success",
-    "Failure",
-    "ResultUtils",
-    "Ok",
-    "Err",
-    # Value Objects
     "ValueObject",
     "EntityId",
     "RestaurantId",
@@ -62,4 +50,11 @@ __all__ = [
     "MessageId",
     "OrderId",
     "PhoneNumber",
+    # Application
+    "Result",
+    "Success",
+    "Failure",
+    "ResultUtils",
+    "Ok",
+    "Err",
 ]

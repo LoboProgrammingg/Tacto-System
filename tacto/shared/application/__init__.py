@@ -1,7 +1,9 @@
 """
-Result Monad for Domain-Driven Design.
+Shared Application — Cross-cutting application concerns.
 
-SHIM: Re-exports from tacto.shared.application.result for backward compatibility.
+Contains:
+- Result type for functional error handling
+- Command/Query base classes (CQRS)
 """
 
 from tacto.shared.application.result import (

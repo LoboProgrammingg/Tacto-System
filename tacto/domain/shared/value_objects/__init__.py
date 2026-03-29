@@ -1,14 +1,18 @@
-"""Shared Value Objects for TactoFlow domain."""
+"""
+Shared Value Objects for TactoFlow domain.
 
-from tacto.domain.shared.value_objects.base import ValueObject
-from tacto.domain.shared.value_objects.identifiers import (
+SHIM: Re-exports from tacto.shared.domain.value_objects for backward compatibility.
+"""
+
+from tacto.shared.domain.value_objects import (
     ConversationId,
     EntityId,
     MessageId,
     OrderId,
+    PhoneNumber,
     RestaurantId,
+    ValueObject,
 )
-from tacto.domain.shared.value_objects.phone_number import PhoneNumber
 
 __all__ = [
     "ValueObject",

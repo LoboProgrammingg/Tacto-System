@@ -1,9 +1,6 @@
-"""
-Entity identifiers as Value Objects.
+"""Shared Value Objects for TactoFlow domain."""
 
-SHIM: Re-exports from tacto.shared.domain.value_objects.identifiers for backward compatibility.
-"""
-
+from tacto.shared.domain.value_objects.base import ValueObject
 from tacto.shared.domain.value_objects.identifiers import (
     ConversationId,
     EntityId,
@@ -11,11 +8,14 @@ from tacto.shared.domain.value_objects.identifiers import (
     OrderId,
     RestaurantId,
 )
+from tacto.shared.domain.value_objects.phone_number import PhoneNumber
 
 __all__ = [
+    "ValueObject",
     "EntityId",
     "RestaurantId",
     "ConversationId",
     "MessageId",
     "OrderId",
+    "PhoneNumber",
 ]
