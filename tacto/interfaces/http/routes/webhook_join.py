@@ -86,55 +86,51 @@ async def join_webhook(
 
         # ── Step 3: fromMe=true → check if AI-sent or human operator ─────────
         if from_me:
-            # Log FULL payload for debugging — capture ALL fields
-            message_content = data.get("message", {})
-            message_type = data.get("messageType", "unknown")
+            # Key fields for detection:
+            # - sender: restaurant's connected phone (e.g., "554187273618@s.whatsapp.net")
+            # - remoteJid: customer's phone (the recipient)
+            # - source: "web" = WhatsApp Web, "android"/"ios" = mobile app
+            sender: str = body.get("sender", "")
+            source: str = data.get("source", "")
             
-            # Log complete payload to identify instance phone number field
-            log.warning(
-                "FROM_ME_FULL_PAYLOAD_DEBUG",
-                full_body=body,
-                full_data=data,
-                full_key=key,
-                message_type=message_type,
-                message_id=message_id,
+            log.debug(
+                "from_me_detection",
+                sender=sender,
                 remote_jid=remote_jid,
-                participant=key.get("participant"),
-                data_participant=data.get("participant"),
-                owner=data.get("owner"),
-                source=data.get("source"),
-                broadcast=data.get("broadcast"),
-                status=data.get("status"),
-                all_data_keys=list(data.keys()),
-                all_key_keys=list(key.keys()),
-                all_body_keys=list(body.keys()),
+                source=source,
+                message_id=message_id,
             )
             
-            # Pass remoteJid as phone_for_check.
-            # The AI tracker stores the customer's phone with a very short TTL.
-            # This catches the echo webhook Join fires ~1s after the AI sends a message.
-            phone_for_check = remote_jid.split("@")[0] if "@" in remote_jid else None
-            is_ai_message = await _check_if_ai_sent_message(request, instance, message_id, phone_for_check)
+            # Check if this is an AI echo (message we sent via API)
+            customer_phone = remote_jid.split("@")[0] if "@" in remote_jid else None
+            is_ai_message = await _check_if_ai_sent_message(request, instance, message_id, customer_phone)
             
             if is_ai_message:
+                log.debug("ai_echo_ignored", message_id=message_id)
                 return WebhookResponse(success=True, message="AI message ignored")
             
-            # Extract customer phone from remoteJid (the conversation partner)
-            customer_phone = _extract_sender_number(key, data)
+            # NOT an AI message → human operator sent this manually
+            # This happens when someone types on WhatsApp Web/App
             if customer_phone:
                 dto = IncomingMessageDTO(
                     instance_key=instance,
                     from_phone=customer_phone,
                     body="__human_operator__",
                     from_me=True,
-                    source="phone",
+                    source=source or "unknown",
                     timestamp=timestamp,
                     message_id=message_id,
                     push_name=push_name,
                 )
-                background_tasks.add_task(_process_message_background, dto)
-                log.info("human_operator_detected", customer_phone=customer_phone)
-            return WebhookResponse(success=True, message="Operator message — AI paused")
+                redis_client = getattr(request.app.state, "redis", None)
+                background_tasks.add_task(_process_message_background, dto, redis_client)
+                log.info(
+                    "human_operator_detected",
+                    customer_phone=customer_phone,
+                    sender=sender.split("@")[0] if sender else None,
+                    source=source,
+                )
+            return WebhookResponse(success=True, message="Operator message — AI paused 12h")
 
         # ── Step 4: Extract text content ──────────────────────────────────
         message: dict[str, Any] = data.get("message", {})

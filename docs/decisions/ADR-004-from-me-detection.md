@@ -16,18 +16,20 @@ Ambos os cenários produzem payloads **estruturalmente idênticos**.
 
 ---
 
-## Estrutura do Payload
+## Estrutura do Payload (Real da Join API)
 
 ```json
 {
   "event": "messages.upsert",
-  "instance": "restaurante_teste",
+  "instance": "wp-empresa-7",
+  "sender": "554187273618@s.whatsapp.net",
   "data": {
     "key": {
-      "remoteJid": "5565992540370@s.whatsapp.net",
+      "remoteJid": "556592540370@s.whatsapp.net",
       "fromMe": true,
-      "id": "MESSAGE_ID_123"
+      "id": "3EB0C6017DD9C2B3CEDC0A"
     },
+    "source": "web",
     "message": {
       "conversation": "Texto da mensagem"
     }
@@ -40,7 +42,9 @@ Ambos os cenários produzem payloads **estruturalmente idênticos**.
 | Campo | Descrição |
 |-------|-----------|
 | `fromMe` | `true` = mensagem enviada PELO número conectado na instância |
-| `remoteJid` | Número do DESTINATÁRIO (cliente) quando `fromMe=true` |
+| `sender` | Número do RESTAURANTE conectado (quem enviou) |
+| `remoteJid` | Número do CLIENTE (destinatário quando `fromMe=true`) |
+| `source` | Origem: `"web"` = WhatsApp Web, `"android"`/`"ios"` = celular |
 | `id` | ID único da mensagem gerado pelo WhatsApp |
 
 ---
