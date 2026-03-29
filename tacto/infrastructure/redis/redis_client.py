@@ -177,6 +177,26 @@ class RedisClient:
         except Exception as e:
             return Err(e)
 
+    async def incr(self, key: str) -> Success[int] | Failure[Exception]:
+        """Increment key value by 1. Creates key with value 1 if it doesn't exist."""
+        try:
+            if not self._client:
+                return Err(ConnectionError("Redis not connected"))
+            result = await self._client.incr(key)
+            return Ok(result)
+        except Exception as e:
+            return Err(e)
+
+    async def ttl(self, key: str) -> Success[int] | Failure[Exception]:
+        """Get remaining TTL of a key in seconds. Returns -1 if no TTL, -2 if key doesn't exist."""
+        try:
+            if not self._client:
+                return Err(ConnectionError("Redis not connected"))
+            result = await self._client.ttl(key)
+            return Ok(result)
+        except Exception as e:
+            return Err(e)
+
     @property
     def is_connected(self) -> bool:
         """Check if client is connected."""
