@@ -353,6 +353,72 @@ class JoinClient(MessagingClient):
             logger.error("join_error_reply", error=str(exc))
             return Err(exc)
 
+    async def get_instance_phone(
+        self, instance_key: str
+    ) -> Success[str] | Failure[Exception]:
+        """
+        Get the connected phone number for an instance.
+
+        GET /instancia/status or similar endpoint.
+        Returns the phone number connected to this WhatsApp instance.
+        """
+        try:
+            headers = self._base_headers(instance_key)
+
+            async def _do_request() -> httpx.Response:
+                async with httpx.AsyncClient(
+                    base_url=self._settings.base_url,
+                    timeout=self._settings.http_timeout,
+                ) as client:
+                    return await client.get("/instancia/status", headers=headers)
+
+            response = await self._with_retry(_do_request, "get_instance_status")
+            response.raise_for_status()
+
+            data = response.json()
+            logger.debug("join_instance_status", data=data)
+
+            # Try to extract phone number from response
+            phone = self._extract_instance_phone(data)
+            if phone:
+                return Ok(phone)
+
+            return Err(ValueError("Could not extract phone from instance status"))
+
+        except Exception as exc:
+            logger.error("join_get_instance_phone_error", error=str(exc))
+            return Err(exc)
+
+    @staticmethod
+    def _extract_instance_phone(data: dict | None) -> str | None:
+        """Extract connected phone number from instance status response."""
+        if not data or not isinstance(data, dict):
+            return None
+
+        # Try common field names
+        for field in ["phone", "number", "jid", "wid", "me", "ownerJid", "owner"]:
+            value = data.get(field)
+            if value:
+                # Clean the phone number
+                if isinstance(value, str):
+                    return value.split("@")[0].replace("+", "")
+                if isinstance(value, dict):
+                    # Could be {user: "5565...", server: "s.whatsapp.net"}
+                    user = value.get("user") or value.get("_serialized", "").split("@")[0]
+                    if user:
+                        return user
+
+        # Try nested structures
+        instance = data.get("instance", {})
+        if isinstance(instance, dict):
+            for field in ["phone", "number", "owner", "wid"]:
+                value = instance.get(field)
+                if value:
+                    if isinstance(value, str):
+                        return value.split("@")[0].replace("+", "")
+
+        return None
+
     @staticmethod
     def _extract_message_id(data: dict | None) -> str | None:
         """

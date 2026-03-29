@@ -7,6 +7,14 @@ Decision flow:
   4. Extract text — ignore media
   5. Buffer messages (5s window) to combine rapid consecutive messages
   6. Route to ProcessIncomingMessageUseCase
+
+Human Operator Detection (fromMe=true):
+  - When fromMe=true, the message was sent FROM the instance's connected phone
+  - remoteJid is always the RECIPIENT (customer's phone)
+  - To distinguish AI vs human:
+    1. Check Redis SentMessageTracker (message_id or phone)
+    2. If found → AI echo → ignore
+    3. If NOT found → human operator → disable AI 12h
 """
 
 from typing import Any
@@ -78,17 +86,28 @@ async def join_webhook(
 
         # ── Step 3: fromMe=true → check if AI-sent or human operator ─────────
         if from_me:
-            # Log full payload for debugging
+            # Log FULL payload for debugging — capture ALL fields
             message_content = data.get("message", {})
             message_type = data.get("messageType", "unknown")
-            log.debug(
-                "from_me_payload_debug",
+            
+            # Log complete payload to identify instance phone number field
+            log.warning(
+                "FROM_ME_FULL_PAYLOAD_DEBUG",
+                full_body=body,
+                full_data=data,
+                full_key=key,
                 message_type=message_type,
                 message_id=message_id,
                 remote_jid=remote_jid,
-                has_conversation=bool(message_content.get("conversation")),
-                has_extended_text=bool(message_content.get("extendedTextMessage")),
-                message_keys=list(message_content.keys()) if message_content else [],
+                participant=key.get("participant"),
+                data_participant=data.get("participant"),
+                owner=data.get("owner"),
+                source=data.get("source"),
+                broadcast=data.get("broadcast"),
+                status=data.get("status"),
+                all_data_keys=list(data.keys()),
+                all_key_keys=list(key.keys()),
+                all_body_keys=list(body.keys()),
             )
             
             # Pass remoteJid as phone_for_check.
