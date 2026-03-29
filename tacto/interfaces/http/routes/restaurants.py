@@ -245,7 +245,7 @@ async def sync_tacto_menu(
     from tacto.infrastructure.external.tacto_menu_provider import TactoMenuProvider
     from tacto.infrastructure.ai.gemini_client import GeminiClient
     from tacto.infrastructure.persistence.restaurant_repository import PostgresRestaurantRepository
-    from tacto.infrastructure.vector_store.pgvector_store import PgvectorStore
+    from tacto.infrastructure.database.pgvector_store import PgvectorStore
     from tacto.application.use_cases.sync_tacto_menu import SyncTactoMenuUseCase
 
     redis_client = getattr(request.app.state, "redis", None)

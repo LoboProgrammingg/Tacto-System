@@ -13,6 +13,10 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from tacto.domain.restaurant.value_objects.opening_hours import OpeningHours
 
+from tacto.domain.messaging.events.ai_disabled import AIDisabled
+from tacto.domain.messaging.events.ai_enabled import AIEnabled
+from tacto.domain.messaging.events.message_received import MessageReceived
+from tacto.domain.shared.events.domain_event import DomainEvent
 from tacto.domain.shared.exceptions import BusinessRuleViolationError
 from tacto.domain.shared.value_objects import ConversationId, PhoneNumber, RestaurantId
 
@@ -45,6 +49,8 @@ class Conversation:
     metadata: Optional[dict[str, Any]] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    # Pending domain events — lidos e despachados pelo repositório/use case após save
+    pending_events: list[DomainEvent] = field(default_factory=list, repr=False, compare=False)
 
     def can_ai_respond(self) -> bool:
         """
@@ -62,6 +68,10 @@ class Conversation:
 
         return True
 
+    def _add_event(self, event: DomainEvent) -> None:
+        """Acumula evento para despacho após persistência."""
+        self.pending_events.append(event)
+
     def disable_ai(
         self,
         reason: str,
@@ -78,6 +88,13 @@ class Conversation:
         self.ai_disabled_until = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
         self.ai_disabled_reason = reason
         self._touch()
+        self._add_event(AIDisabled(
+            conversation_id=self.id.value,
+            restaurant_id=self.restaurant_id.value,
+            customer_phone=self.customer_phone.value,
+            reason=reason,
+            disabled_until=self.ai_disabled_until,
+        ))
 
     def enable_ai(self) -> None:
         """Re-enable AI for this conversation."""
@@ -85,6 +102,11 @@ class Conversation:
         self.ai_disabled_until = None
         self.ai_disabled_reason = None
         self._touch()
+        self._add_event(AIEnabled(
+            conversation_id=self.id.value,
+            restaurant_id=self.restaurant_id.value,
+            customer_phone=self.customer_phone.value,
+        ))
 
     def disable_ai_until_opening(
         self,
@@ -138,6 +160,11 @@ class Conversation:
         """Record that a message was sent/received."""
         self.last_message_at = timestamp
         self._touch()
+        self._add_event(MessageReceived(
+            conversation_id=self.id.value,
+            restaurant_id=self.restaurant_id.value,
+            customer_phone=self.customer_phone.value,
+        ))
 
     def update_customer_name(self, name: str) -> None:
         """Update customer name if discovered."""

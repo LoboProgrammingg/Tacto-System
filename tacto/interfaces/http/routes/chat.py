@@ -14,8 +14,8 @@ import structlog
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from tacto.domain.ai.agents.base_agent import AgentContext
-from tacto.domain.ai.agents.level1_agent import Level1Agent
+from tacto.domain.ai_assistance.value_objects.agent_context import AgentContext
+from tacto.infrastructure.agents.level1_agent import Level1Agent
 from tacto.domain.messaging.entities.conversation import Conversation
 from tacto.domain.messaging.entities.message import Message
 from tacto.domain.messaging.value_objects.message_source import MessageSource

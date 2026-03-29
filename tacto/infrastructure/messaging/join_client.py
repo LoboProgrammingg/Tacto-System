@@ -20,8 +20,9 @@ import httpx
 import structlog
 
 from tacto.config import JoinAPISettings, get_settings
-from tacto.domain.assistant.ports.messaging_client import MessagingClient, SendMessageResult
+from tacto.domain.ai_assistance.ports.messaging_client import MessagingClient, SendMessageResult
 from tacto.domain.shared.result import Err, Failure, Ok, Success
+from tacto.infrastructure.circuit_breaker import CircuitBreaker, CircuitOpenError
 from tacto.infrastructure.messaging.sent_message_tracker import SentMessageTracker
 
 
@@ -89,6 +90,11 @@ class JoinClient(MessagingClient):
     ) -> None:
         self._settings = settings or get_settings().join
         self._tracker = message_tracker
+        self._circuit_breaker = CircuitBreaker(
+            name="join_api",
+            failure_threshold=5,
+            recovery_timeout=30.0,
+        )
 
     def _calc_typing_delay_ms(self, text: str) -> int:
         """Calculate a humanized typing delay (ms) based on message length."""
@@ -108,7 +114,15 @@ class JoinClient(MessagingClient):
     async def _with_retry(
         self, request_fn, operation: str
     ) -> httpx.Response:
-        """Execute an HTTP request with exponential backoff retry."""
+        """Execute an HTTP request with exponential backoff retry and circuit breaker."""
+        # Check circuit breaker before attempting
+        if self._circuit_breaker.is_open():
+            logger.warning(
+                "join_circuit_open",
+                operation=operation,
+            )
+            raise CircuitOpenError(self._circuit_breaker.name)
+
         last_exc: Exception | None = None
         max_attempts = self._settings.retry_max_attempts
         base_delay = self._settings.retry_base_delay
@@ -136,6 +150,8 @@ class JoinClient(MessagingClient):
                             status_code=response.status_code,
                         )
 
+                # Success — record and return
+                self._circuit_breaker.record_success()
                 return response
 
             except (httpx.TransportError, httpx.TimeoutException) as exc:
@@ -157,6 +173,8 @@ class JoinClient(MessagingClient):
                         error=str(exc),
                     )
 
+        # All retries exhausted — record failure in circuit breaker
+        self._circuit_breaker.record_failure()
         raise last_exc  # type: ignore[misc]
 
     async def connect(self) -> Success[bool] | Failure[Exception]:

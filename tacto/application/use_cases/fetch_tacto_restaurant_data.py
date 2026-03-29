@@ -11,7 +11,7 @@ from uuid import UUID
 
 import structlog
 
-from tacto.domain.assistant.ports.menu_provider import MenuProvider
+from tacto.domain.ai_assistance.ports.menu_provider import MenuProvider
 from tacto.domain.restaurant.repository import RestaurantRepository
 from tacto.domain.shared.result import Err, Failure, Ok, Success
 from tacto.domain.shared.value_objects import RestaurantId

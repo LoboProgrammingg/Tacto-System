@@ -11,9 +11,9 @@ import os
 
 import structlog
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from tacto.config import Settings, get_settings
+from tacto.interfaces.middlewares.middleware import setup_middlewares
 from tacto.infrastructure.database.connection import close_database, get_engine
 from tacto.infrastructure.redis.redis_client import RedisClient
 from tacto.interfaces.http.routes import router as api_router
@@ -107,13 +107,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"] if settings.app.debug else [],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    setup_middlewares(app)
 
     @app.get("/health", tags=["Health"])
     async def health_check() -> dict[str, str]:

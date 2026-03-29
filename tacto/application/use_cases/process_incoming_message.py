@@ -11,13 +11,13 @@ import structlog
 
 from tacto.application.dto.message_dto import IncomingMessageDTO, MessageResponseDTO
 from tacto.config.settings import get_settings
-from tacto.domain.ai.agents.base_agent import AgentContext, BaseAgent
-from tacto.domain.ai.agents.level1_agent import Level1Agent
+from tacto.domain.ai_assistance.ports.agent_port import BaseAgent
+from tacto.domain.ai_assistance.value_objects.agent_context import AgentContext
 from tacto.application.services.memory_orchestration_service import MemoryManager
-from tacto.domain.assistant.ports.embedding_client import EmbeddingClient
-from tacto.domain.assistant.ports.menu_provider import MenuProvider
-from tacto.domain.assistant.ports.messaging_client import MessagingClient
-from tacto.domain.assistant.ports.vector_store import VectorStore
+from tacto.domain.ai_assistance.ports.embedding_client import EmbeddingClient
+from tacto.domain.ai_assistance.ports.menu_provider import MenuProvider
+from tacto.domain.ai_assistance.ports.messaging_client import MessagingClient
+from tacto.domain.ai_assistance.ports.vector_store import VectorStore
 from tacto.domain.messaging.entities.conversation import Conversation
 from tacto.domain.messaging.entities.message import Message
 from tacto.domain.messaging.repository import ConversationRepository, MessageRepository
@@ -61,7 +61,7 @@ class ProcessIncomingMessageUseCase:
         self._conversation_repo = conversation_repository
         self._message_repo = message_repository
         self._messaging_client = messaging_client
-        self._ai_agent = ai_agent or Level1Agent(memory_manager=memory_manager)
+        self._ai_agent = ai_agent
         self._memory_manager = memory_manager
         self._menu_provider = menu_provider
         self._vector_store = vector_store

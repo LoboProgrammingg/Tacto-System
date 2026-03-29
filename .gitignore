@@ -81,3 +81,5 @@ setup_project_structure.py
 
 # Alembic local overrides
 alembic.ini.local
+
+CLAUDE.md

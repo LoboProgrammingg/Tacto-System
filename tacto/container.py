@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from tacto.config import Settings, get_settings
-from tacto.domain.assistant.ports.ai_client import AIClient
+from tacto.domain.ai_assistance.ports.ai_client import AIClient
 from tacto.infrastructure.ai.gemini_client import GeminiClient
 from tacto.infrastructure.external.tacto_client import TactoClient
 from tacto.infrastructure.messaging.join_client import JoinClient

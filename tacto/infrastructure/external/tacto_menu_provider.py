@@ -11,7 +11,7 @@ from typing import Callable, Optional
 import structlog
 
 from tacto.config import get_settings
-from tacto.domain.assistant.ports.menu_provider import (
+from tacto.domain.ai_assistance.ports.menu_provider import (
     InstitutionalData,
     MenuData,
     MenuItem,

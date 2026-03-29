@@ -11,8 +11,8 @@ from google import genai
 from google.genai import types as genai_types
 
 from tacto.config import GeminiSettings, get_settings
-from tacto.domain.assistant.ports.ai_client import AIClient, AIRequest, AIResponse
-from tacto.domain.assistant.ports.embedding_client import EmbeddingClient
+from tacto.domain.ai_assistance.ports.ai_client import AIClient, AIRequest, AIResponse
+from tacto.domain.ai_assistance.ports.embedding_client import EmbeddingClient
 from tacto.domain.shared.result import Err, Failure, Ok, Success
 
 

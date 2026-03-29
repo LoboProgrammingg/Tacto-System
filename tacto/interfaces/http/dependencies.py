@@ -53,9 +53,9 @@ async def create_and_execute_process_message(
 ) -> None:
     """Create and execute ProcessIncomingMessageUseCase with proper session lifecycle."""
     import structlog
-    from tacto.domain.ai.agents.level1_agent import Level1Agent
+    from tacto.infrastructure.agents.level1_agent import Level1Agent
     from tacto.infrastructure.ai.gemini_client import GeminiClient
-    from tacto.infrastructure.vector_store.pgvector_store import PgvectorStore
+    from tacto.infrastructure.database.pgvector_store import PgvectorStore
 
     logger = structlog.get_logger()
 

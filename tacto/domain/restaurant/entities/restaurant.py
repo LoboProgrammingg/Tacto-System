@@ -12,9 +12,11 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
+from tacto.domain.restaurant.events.restaurant_created import RestaurantCreated
 from tacto.domain.restaurant.value_objects.automation_type import AutomationType
 from tacto.domain.restaurant.value_objects.integration_type import IntegrationType
 from tacto.domain.restaurant.value_objects.opening_hours import OpeningHours
+from tacto.domain.shared.events.domain_event import DomainEvent
 from tacto.domain.shared.exceptions import BusinessRuleViolationError, ValidationError
 from tacto.domain.shared.value_objects import RestaurantId
 
@@ -50,6 +52,8 @@ class Restaurant:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     deleted_at: Optional[datetime] = None
+    # Pending domain events — lidos e despachados pelo repositório/use case após save
+    pending_events: list[DomainEvent] = field(default_factory=list, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Validate invariants after initialization."""
@@ -152,6 +156,10 @@ class Restaurant:
         self.automation_type = new_type
         self._touch()
 
+    def _add_event(self, event: DomainEvent) -> None:
+        """Acumula evento para despacho após persistência."""
+        self.pending_events.append(event)
+
     def _touch(self) -> None:
         """Update the updated_at timestamp."""
         self.updated_at = datetime.now(timezone.utc)
@@ -176,7 +184,7 @@ class Restaurant:
 
         This is the preferred way to create new Restaurant instances.
         """
-        return cls(
+        instance = cls(
             id=restaurant_id or RestaurantId.generate(),
             name=name,
             prompt_default=prompt_default,
@@ -189,3 +197,9 @@ class Restaurant:
             empresa_base_id=empresa_base_id,
             timezone=timezone,
         )
+        instance._add_event(RestaurantCreated(
+            restaurant_id=instance.id.value,
+            name=instance.name,
+            canal_master_id=instance.canal_master_id,
+        ))
+        return instance

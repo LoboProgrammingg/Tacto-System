@@ -14,6 +14,7 @@ import structlog
 
 from tacto.config import TactoAPISettings, get_settings
 from tacto.domain.shared.result import Err, Failure, Ok, Success
+from tacto.infrastructure.circuit_breaker import CircuitBreaker, CircuitOpenError
 
 
 logger = structlog.get_logger()
@@ -52,6 +53,7 @@ class TactoClient:
         self._settings = settings or get_settings().tacto
         self._client: Optional[httpx.AsyncClient] = None
         self._token: Optional[_TactoToken] = None
+        self._circuit_breaker = CircuitBreaker(name="tacto_api")
 
     async def connect(self) -> Success[bool] | Failure[Exception]:
         """Initialize HTTP client."""
@@ -99,6 +101,9 @@ class TactoClient:
         Content-Type: application/x-www-form-urlencoded
         Body: grant_type, client_id, client_secret [, scope]
         """
+        if self._circuit_breaker.is_open():
+            return Err(CircuitOpenError(self._circuit_breaker.name))
+
         try:
             payload: dict[str, str] = {
                 "grant_type": "client_credentials",
@@ -125,13 +130,16 @@ class TactoClient:
             )
 
             logger.debug("Tacto token refreshed", expires_in=self._token.expires_in)
+            self._circuit_breaker.record_success()
             return Ok(self._token.access_token)
 
         except httpx.HTTPStatusError as e:
             logger.error("Tacto auth failed", status=e.response.status_code, error=str(e))
+            self._circuit_breaker.record_failure()
             return Err(e)
         except Exception as e:
             logger.error("Tacto auth error", error=str(e))
+            self._circuit_breaker.record_failure()
             return Err(e)
 
     # ------------------------------------------------------------------ #
@@ -199,6 +207,7 @@ class TactoClient:
                 ),
             )
             response.raise_for_status()
+            self._circuit_breaker.record_success()
             return Ok(response.json())
 
         except httpx.HTTPStatusError as e:
@@ -208,9 +217,11 @@ class TactoClient:
                 empresa_base_id=empresa_base_id,
                 error=str(e),
             )
+            self._circuit_breaker.record_failure()
             return Err(e)
         except Exception as e:
             logger.error("Tacto RAG full error", error=str(e))
+            self._circuit_breaker.record_failure()
             return Err(e)
 
     async def get_institutional_data(
@@ -239,6 +250,7 @@ class TactoClient:
                 ),
             )
             response.raise_for_status()
+            self._circuit_breaker.record_success()
             return Ok(response.json())
 
         except httpx.HTTPStatusError as e:
@@ -248,9 +260,11 @@ class TactoClient:
                 empresa_base_id=empresa_base_id,
                 error=str(e),
             )
+            self._circuit_breaker.record_failure()
             return Err(e)
         except Exception as e:
             logger.error("Tacto institutional data error", error=str(e))
+            self._circuit_breaker.record_failure()
             return Err(e)
 
     async def health_check(self) -> Success[bool] | Failure[Exception]:

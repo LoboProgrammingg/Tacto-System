@@ -1,6 +1,14 @@
-"""Configuration module for TactoFlow."""
+"""
+Backward-compatibility shim.
 
-from tacto.config.settings import (
+The authoritative settings implementation lives in:
+    tacto/infrastructure/config/config.py
+
+This module re-exports everything so existing imports continue to work
+without any changes across the codebase.
+"""
+
+from tacto.infrastructure.config.config import (  # noqa: F401
     AppSettings,
     DatabaseSettings,
     GeminiSettings,
