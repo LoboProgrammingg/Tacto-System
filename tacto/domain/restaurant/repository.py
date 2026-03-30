@@ -6,7 +6,7 @@ Implementation is in infrastructure layer.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Any, Optional
 
 from tacto.domain.restaurant.entities.restaurant import Restaurant
 from tacto.shared.application import Failure, Success
@@ -118,6 +118,17 @@ class RestaurantRepository(ABC):
 
         Returns:
             Success with True if updated or Failure with error
+        """
+        pass
+
+    @abstractmethod
+    async def update_opening_hours(
+        self, restaurant_id: RestaurantId, opening_hours: dict[str, Any]
+    ) -> Success[bool] | Failure[Exception]:
+        """
+        Update the opening_hours for a restaurant.
+
+        Used by tacto-sync to persist hours fetched from Tacto API.
         """
         pass
 

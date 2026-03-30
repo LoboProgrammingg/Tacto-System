@@ -15,9 +15,9 @@ class CreateRestaurantDTO:
     """DTO for creating a new restaurant."""
 
     name: str
-    prompt_default: str
+    prompt_default: str = ""
     menu_url: str
-    opening_hours: dict[str, Any]
+    opening_hours: Optional[dict[str, Any]]
     chave_grupo_empresarial: UUID
     canal_master_id: str
     empresa_base_id: str

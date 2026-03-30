@@ -6,8 +6,8 @@ Implementation fetches from Tacto API or cache.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 from tacto.shared.application import Failure, Success
 from tacto.shared.domain import RestaurantId
@@ -51,6 +51,7 @@ class MenuData:
     address: Optional[str] = None
     hours_text: str = ""
     restaurant_description: str = ""
+    opening_hours: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

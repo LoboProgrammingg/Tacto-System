@@ -50,6 +50,7 @@ async def get_create_restaurant_use_case() -> AsyncGenerator[CreateRestaurantUse
 async def create_and_execute_process_message(
     dto,
     redis_client: RedisClient | None = None,
+    tacto_client: TactoClient | None = None,
 ) -> None:
     """Create and execute ProcessIncomingMessageUseCase with proper session lifecycle."""
     import structlog
@@ -59,7 +60,8 @@ async def create_and_execute_process_message(
 
     logger = structlog.get_logger()
 
-    tacto_client = TactoClient()
+    if tacto_client is None:
+        tacto_client = TactoClient()
     menu_provider = TactoMenuProvider(
         tacto_client=tacto_client,
         redis_client=redis_client,

@@ -16,6 +16,7 @@ from tacto.config import Settings, get_settings
 from tacto.interfaces.middlewares.middleware import setup_middlewares
 from tacto.infrastructure.database.connection import close_database, get_engine
 from tacto.infrastructure.redis.redis_client import RedisClient
+from tacto.infrastructure.external.tacto_client import TactoClient
 from tacto.interfaces.http.routes import router as api_router
 
 
@@ -106,11 +107,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     get_engine()
     logger.info("Database engine initialized")
 
+    # Shared Tacto client — token cache + circuit breaker persist across requests
+    tacto_client = TactoClient()
+    await tacto_client.connect()
+    app.state.tacto_client = tacto_client
+    logger.info("Tacto API client initialized")
+
     app.state.settings = settings
 
     yield
 
     logger.info("Shutting down TactoFlow")
+
+    if hasattr(app.state, "tacto_client"):
+        await app.state.tacto_client.disconnect()
+        logger.info("Tacto client disconnected")
 
     if app.state.redis:
         await app.state.redis.disconnect()

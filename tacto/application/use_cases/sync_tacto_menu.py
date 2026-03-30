@@ -168,6 +168,17 @@ class SyncTactoMenuUseCase:
             return save_result
 
         items_saved = save_result.value
+
+        # 9. Update opening_hours in DB if Tacto returned structured hours
+        if menu.opening_hours:
+            hours_result = await self._restaurant_repo.update_opening_hours(
+                RestaurantId(restaurant_id), menu.opening_hours
+            )
+            if isinstance(hours_result, Failure):
+                log.warning("opening_hours_update_failed", error=str(hours_result.error))
+            else:
+                log.info("opening_hours_updated", days=list(menu.opening_hours.keys()))
+
         log.info("sync_complete", items_saved=items_saved)
 
         return Ok(SyncResultDTO(

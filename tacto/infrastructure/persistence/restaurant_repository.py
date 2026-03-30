@@ -4,7 +4,7 @@ PostgreSQL Restaurant Repository Implementation.
 Implements the RestaurantRepository interface from the domain layer.
 """
 
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -151,6 +151,22 @@ class PostgresRestaurantRepository(RestaurantRepository):
                 update(RestaurantModel)
                 .where(RestaurantModel.id == restaurant_id.value)
                 .values(canal_master_id=canal_master_id)
+            )
+            await self._session.execute(stmt)
+            await self._session.flush()
+            return Ok(True)
+        except Exception as e:
+            return Err(e)
+
+    async def update_opening_hours(
+        self, restaurant_id: RestaurantId, opening_hours: dict[str, Any]
+    ) -> Success[bool] | Failure[Exception]:
+        """Update opening_hours directly without loading the full aggregate."""
+        try:
+            stmt = (
+                update(RestaurantModel)
+                .where(RestaurantModel.id == restaurant_id.value)
+                .values(opening_hours=opening_hours)
             )
             await self._session.execute(stmt)
             await self._session.flush()

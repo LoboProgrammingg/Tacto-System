@@ -110,20 +110,22 @@ async def join_webhook(
                 return WebhookResponse(success=True, message="AI message ignored")
             
             # NOT an AI message → human operator sent this manually
-            # This happens when someone types on WhatsApp Web/App
+            # This happens when someone types on WhatsApp Web/App/Desktop/Mobile
+            # ALWAYS use "human_operator" source to trigger AI disable (12h)
             if customer_phone:
                 dto = IncomingMessageDTO(
                     instance_key=instance,
                     from_phone=customer_phone,
                     body="__human_operator__",
                     from_me=True,
-                    source=source or "unknown",
+                    source="human_operator",  # Forces AI disable regardless of device
                     timestamp=timestamp,
                     message_id=message_id,
                     push_name=push_name,
                 )
                 redis_client = getattr(request.app.state, "redis", None)
-                background_tasks.add_task(_process_message_background, dto, redis_client)
+                tacto_client = getattr(request.app.state, "tacto_client", None)
+                background_tasks.add_task(_process_message_background, dto, redis_client, tacto_client)
                 log.info(
                     "human_operator_detected",
                     customer_phone=customer_phone,
@@ -153,6 +155,7 @@ async def join_webhook(
 
         # ── Step 6: Buffer message and schedule processing ───────────────
         redis_client = getattr(request.app.state, "redis", None)
+        tacto_client = getattr(request.app.state, "tacto_client", None)
         
         # Add message to buffer and schedule delayed processing
         background_tasks.add_task(
@@ -164,6 +167,7 @@ async def join_webhook(
             message_id=message_id,
             push_name=push_name,
             redis_client=redis_client,
+            tacto_client=tacto_client,
         )
 
         log.info("webhook_accepted", phone=phone, message_preview=text[:60])
@@ -185,6 +189,7 @@ async def _buffer_and_process(
     message_id: str,
     push_name: str,
     redis_client,
+    tacto_client=None,
 ) -> None:
     """Delegate buffering logic to MessageBufferService (application layer)."""
     buffer_service = MessageBufferService(redis_client)
@@ -195,16 +200,16 @@ async def _buffer_and_process(
         timestamp=timestamp,
         message_id=message_id,
         push_name=push_name,
-        process_callback=lambda dto: _process_message_background(dto, redis_client),
+        process_callback=lambda dto: _process_message_background(dto, redis_client, tacto_client),
     )
 
 
-async def _process_message_background(dto: IncomingMessageDTO, redis_client=None) -> None:
+async def _process_message_background(dto: IncomingMessageDTO, redis_client=None, tacto_client=None) -> None:
     """Process message in background."""
     from tacto.interfaces.http.dependencies import create_and_execute_process_message
 
     try:
-        await create_and_execute_process_message(dto, redis_client)
+        await create_and_execute_process_message(dto, redis_client, tacto_client)
     except Exception as exc:
         logger.error("background_task_error", error=str(exc), phone=dto.clean_phone)
 

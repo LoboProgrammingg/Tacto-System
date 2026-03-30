@@ -10,9 +10,11 @@ class CreateRestaurantRequest(BaseModel):
     """Request body for creating a restaurant."""
 
     name: str = Field(..., min_length=3, max_length=255)
-    prompt_default: str = Field(..., min_length=10)
-    menu_url: str = Field(..., pattern=r"^https?://")
-    opening_hours: dict[str, Any]
+    menu_url: str = Field(..., pattern=r"^https?://", description="URL do Webgula para pedidos (ex: https://webgula.com.br/restaurante/delivery)")
+    opening_hours: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Horários de funcionamento. Se não informado, será preenchido automaticamente pelo tacto-sync.",
+    )
     chave_grupo_empresarial: UUID
     canal_master_id: str = Field(..., min_length=1)
     empresa_base_id: str = Field(..., min_length=1)

@@ -47,20 +47,21 @@ class SentMessageTracker:
         message_id: str,
         phone: Optional[str] = None,
     ) -> bool:
-        """Check if message was sent by AI (returns True if matched by id or phone)."""
+        """
+        Check if message was sent by AI.
+        
+        IMPORTANT: Only checks by message_id, NOT by phone number.
+        Phone-based checking caused false positives where human operator
+        messages were ignored because the AI had recently sent a message
+        to the same customer.
+        """
         if not self._redis or not self._redis.is_connected:
-            return True  # Assume AI to avoid false positives
+            # If Redis is down, return False to allow human operator detection
+            return False
 
-        # Check by message_id
+        # Check ONLY by message_id — phone-based check was causing false positives
         if message_id:
             result = await self._redis.exists(f"{_PREFIX_ID}{instance_key}:{message_id}")
-            if result.is_success() and result.value:
-                return True
-
-        # Check by phone number
-        if phone:
-            clean_phone = phone.replace("@s.whatsapp.net", "").replace("@c.us", "")
-            result = await self._redis.exists(f"{_PREFIX_NUM}{instance_key}:{clean_phone}")
             if result.is_success() and result.value:
                 return True
 

@@ -265,6 +265,7 @@ class TactoMenuProvider(MenuProvider):
             last_updated=datetime.now(timezone.utc).isoformat(),
             address=self._extract_address(data),
             hours_text=self._extract_hours_text(data),
+            opening_hours=self._extract_opening_hours_dict(data),
             restaurant_description=data.get("atividadesServicos") or data.get("nossaHistoria") or "",
         )
 
@@ -353,6 +354,63 @@ class TactoMenuProvider(MenuProvider):
             parts.append(f"CEP {cep}")
 
         return ", ".join(p for p in parts if p)
+
+    _PT_DAY_TO_EN: dict[str, str] = {
+        "segunda": "monday",
+        "terca": "tuesday",
+        "terça": "tuesday",
+        "quarta": "wednesday",
+        "quinta": "thursday",
+        "sexta": "friday",
+        "sabado": "saturday",
+        "sábado": "saturday",
+        "domingo": "sunday",
+        "seg": "monday",
+        "ter": "tuesday",
+        "qua": "wednesday",
+        "qui": "thursday",
+        "sex": "friday",
+        "sab": "saturday",
+        "dom": "sunday",
+        "1": "monday",
+        "2": "tuesday",
+        "3": "wednesday",
+        "4": "thursday",
+        "5": "friday",
+        "6": "saturday",
+        "7": "sunday",
+    }
+
+    def _extract_opening_hours_dict(self, data: dict) -> dict:
+        """Parse horarioAtendimentoDelivery into structured OpeningHours dict."""
+        horarios = data.get("horarioAtendimentoDelivery", [])
+        if not horarios:
+            return {}
+
+        result: dict[str, dict] = {}
+        for h in horarios:
+            dia_raw = str(h.get("diaDaSemana") or h.get("diaDaSemanaSigla") or h.get("diaSemana") or "")
+            abertura = h.get("horarioAbertura", "") or ""
+            fechamento = h.get("horarioFechamento", "") or ""
+
+            if not dia_raw:
+                continue
+
+            # Normalize: lowercase, remove accents approximation, get first word
+            dia_norm = dia_raw.lower().split("-")[0].strip()
+            day_en = self._PT_DAY_TO_EN.get(dia_norm)
+            if not day_en:
+                continue
+
+            if abertura and fechamento:
+                result[day_en] = {
+                    "opens_at": abertura[:5],
+                    "closes_at": fechamento[:5],
+                }
+            else:
+                result[day_en] = {"is_closed": True}
+
+        return result
 
     def _extract_hours_text(self, data: dict) -> str:
         """Format horarioAtendimentoDelivery into readable text."""

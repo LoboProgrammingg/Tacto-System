@@ -40,7 +40,7 @@ async def create_restaurant(
     """Create a new restaurant."""
     dto = CreateRestaurantDTO(
         name=request.name,
-        prompt_default=request.prompt_default,
+        prompt_default="",
         menu_url=request.menu_url,
         opening_hours=request.opening_hours,
         chave_grupo_empresarial=request.chave_grupo_empresarial,
@@ -178,7 +178,6 @@ async def sync_tacto_menu(
     """Generate embeddings from Tacto menu and save to pgvector."""
     from tacto.shared.application import Failure
     from tacto.infrastructure.database.connection import get_async_session
-    from tacto.infrastructure.external.tacto_client import TactoClient
     from tacto.infrastructure.external.tacto_menu_provider import TactoMenuProvider
     from tacto.infrastructure.ai.gemini_client import GeminiClient
     from tacto.infrastructure.persistence.restaurant_repository import PostgresRestaurantRepository
@@ -186,12 +185,16 @@ async def sync_tacto_menu(
     from tacto.application.use_cases.sync_tacto_menu import SyncTactoMenuUseCase
 
     redis_client = getattr(request.app.state, "redis", None)
+    tacto_client = getattr(request.app.state, "tacto_client", None)
+    if tacto_client is None:
+        from tacto.infrastructure.external.tacto_client import TactoClient
+        tacto_client = TactoClient()
 
     async with get_async_session() as session:
         use_case = SyncTactoMenuUseCase(
             restaurant_repository=PostgresRestaurantRepository(session),
             menu_provider=TactoMenuProvider(
-                tacto_client=TactoClient(),
+                tacto_client=tacto_client,
                 redis_client=redis_client,
             ),
             pgvector_store=PgvectorStore(session),
@@ -234,13 +237,16 @@ async def fetch_tacto_restaurant_data(
     from tacto.shared.application import Failure
     from tacto.shared.domain.value_objects import RestaurantId
     from tacto.infrastructure.database.connection import get_async_session
-    from tacto.infrastructure.external.tacto_client import TactoClient
     from tacto.infrastructure.external.tacto_menu_provider import TactoMenuProvider
     from tacto.infrastructure.persistence.restaurant_repository import PostgresRestaurantRepository
     from tacto.application.use_cases.fetch_tacto_restaurant_data import FetchTactoRestaurantDataUseCase
 
     redis_client = getattr(request.app.state, "redis", None)
-    tacto_client = TactoClient()
+    tacto_client = getattr(request.app.state, "tacto_client", None)
+    if tacto_client is None:
+        from tacto.infrastructure.external.tacto_client import TactoClient
+        tacto_client = TactoClient()
+
     menu_provider = TactoMenuProvider(tacto_client=tacto_client, redis_client=redis_client)
 
     async with get_async_session() as session:

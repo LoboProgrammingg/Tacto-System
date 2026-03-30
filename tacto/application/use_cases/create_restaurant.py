@@ -60,7 +60,7 @@ class CreateRestaurantUseCase:
                     )
                 )
 
-            opening_hours = OpeningHours.from_dict(dto.opening_hours)
+            opening_hours = OpeningHours.from_dict(dto.opening_hours or {})
 
             restaurant = Restaurant.create(
                 name=dto.name,

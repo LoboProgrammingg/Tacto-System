@@ -5,6 +5,7 @@ Handles OAuth2 authentication and communication with Tacto's external API.
 Auth is fully internal — no endpoint is exposed for token generation.
 """
 
+import asyncio
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -100,47 +101,95 @@ class TactoClient:
         POST {TACTO_AUTH_URL}
         Content-Type: application/x-www-form-urlencoded
         Body: grant_type, client_id, client_secret [, scope]
+
+        Includes retry (2 attempts, 2s delay) for transient network failures.
         """
         if self._circuit_breaker.is_open():
             return Err(CircuitOpenError(self._circuit_breaker.name))
 
-        try:
-            payload: dict[str, str] = {
-                "grant_type": "client_credentials",
-                "client_id": self._settings.client_id,
-                "client_secret": self._settings.client_secret,
-            }
-            if self._settings.default_scope:
-                payload["scope"] = self._settings.default_scope
+        max_attempts = 2
+        last_error: Optional[Exception] = None
 
-            async with httpx.AsyncClient(timeout=30) as auth_client:
-                response = await auth_client.post(
-                    self._settings.auth_url,
-                    data=payload,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+        for attempt in range(1, max_attempts + 1):
+            try:
+                payload: dict[str, str] = {
+                    "grant_type": "client_credentials",
+                    "client_id": self._settings.client_id,
+                    "client_secret": self._settings.client_secret,
+                }
+                if self._settings.default_scope:
+                    payload["scope"] = self._settings.default_scope
+
+                async with httpx.AsyncClient(timeout=30) as auth_client:
+                    response = await auth_client.post(
+                        self._settings.auth_url,
+                        data=payload,
+                        headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+
+                self._token = _TactoToken(
+                    access_token=data["access_token"],
+                    token_type=data.get("token_type", "Bearer"),
+                    expires_in=int(data.get("expires_in", 3600)),
+                    obtained_at=time.time(),
                 )
-                response.raise_for_status()
-                data = response.json()
 
-            self._token = _TactoToken(
-                access_token=data["access_token"],
-                token_type=data.get("token_type", "Bearer"),
-                expires_in=int(data.get("expires_in", 3600)),
-                obtained_at=time.time(),
-            )
+                logger.debug("Tacto token refreshed", expires_in=self._token.expires_in)
+                self._circuit_breaker.record_success()
+                return Ok(self._token.access_token)
 
-            logger.debug("Tacto token refreshed", expires_in=self._token.expires_in)
-            self._circuit_breaker.record_success()
-            return Ok(self._token.access_token)
+            except httpx.TimeoutException as e:
+                last_error = e
+                logger.warning(
+                    "Tacto auth timeout",
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    auth_url=self._settings.auth_url,
+                    error=f"Request timed out after 30s: {type(e).__name__}",
+                )
+            except httpx.ConnectError as e:
+                last_error = e
+                logger.warning(
+                    "Tacto auth connection error",
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    auth_url=self._settings.auth_url,
+                    error=f"Connection failed: {repr(e)}",
+                )
+            except httpx.HTTPStatusError as e:
+                # Non-retryable — bad credentials, wrong endpoint, etc.
+                logger.error(
+                    "Tacto auth failed",
+                    status=e.response.status_code,
+                    error=str(e),
+                )
+                self._circuit_breaker.record_failure()
+                return Err(e)
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    "Tacto auth unexpected error",
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    error=repr(e),
+                    error_type=type(e).__name__,
+                )
 
-        except httpx.HTTPStatusError as e:
-            logger.error("Tacto auth failed", status=e.response.status_code, error=str(e))
-            self._circuit_breaker.record_failure()
-            return Err(e)
-        except Exception as e:
-            logger.error("Tacto auth error", error=str(e))
-            self._circuit_breaker.record_failure()
-            return Err(e)
+            # Retry delay (only if not the last attempt)
+            if attempt < max_attempts:
+                logger.info("Retrying Tacto auth", delay_seconds=2)
+                await asyncio.sleep(2)
+
+        # All attempts exhausted
+        logger.error(
+            "Tacto auth failed after retries",
+            attempts=max_attempts,
+            error=repr(last_error),
+        )
+        self._circuit_breaker.record_failure()
+        return Err(last_error or RuntimeError("Tacto auth failed: unknown error"))
 
     # ------------------------------------------------------------------ #
     # Request helpers                                                       #
