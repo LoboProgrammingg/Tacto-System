@@ -35,10 +35,18 @@ venv.bak/
 *.swo
 *~
 
-# Environment variables
+# Environment variables (secrets - never commit)
 .env
 .env.local
 .env.production
+.env.staging
+config/environments/.env.staging
+config/environments/.env.production
+
+# Keep templates (safe to commit)
+!config/environments/.env.development
+!.env.example
+!.env.*.example
 
 # Database
 *.db

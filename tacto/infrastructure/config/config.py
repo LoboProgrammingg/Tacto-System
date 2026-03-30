@@ -4,22 +4,71 @@ Application settings — Infrastructure layer.
 Follows 12-factor app principles with environment variable configuration.
 This is the authoritative location of all settings classes.
 tacto/config/settings.py is a backward-compatibility shim that re-exports from here.
+
+Environment Detection:
+- Automatically detects environment based on git branch or ENVIRONMENT var
+- Loads environment-specific .env files from config/environments/
+- Supports: development (dev branch), staging, production (main branch)
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Environment Detection
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _get_env_files() -> tuple[str, ...]:
+    """
+    Get list of .env files to load based on current environment.
+
+    Priority (later overrides earlier):
+    1. .env (base/local credentials — git-ignored)
+    2. config/environments/.env.{environment} (env-specific settings — committed)
+    3. .env.local (local overrides, never committed)
+    """
+    try:
+        from config import get_env_files
+        return tuple(str(f) for f in get_env_files())
+    except ImportError:
+        # Fallback if config module not available
+        return (".env",)
+
+
+# Computed once at module import time — shared across all Settings classes.
+_ENV_FILES: tuple[str, ...] = _get_env_files()
+
+
 class AppSettings(BaseSettings):
     """Application-level settings."""
 
+    # Environment identification
+    environment: str = Field(default="development", alias="ENVIRONMENT")
+    
     name: str = Field(default="TactoFlow", alias="APP_NAME")
     version: str = Field(default="0.0.1", alias="APP_VERSION")
     debug: bool = Field(default=False, alias="DEBUG")
     secret_key: str = Field(default="change-me-in-production", alias="SECRET_KEY")
+    
+    @property
+    def is_development(self) -> bool:
+        """Check if running in development environment."""
+        return self.environment.lower() in ("development", "dev", "local")
+    
+    @property
+    def is_staging(self) -> bool:
+        """Check if running in staging environment."""
+        return self.environment.lower() in ("staging", "stg", "stage")
+    
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production environment."""
+        return self.environment.lower() in ("production", "prod", "prd")
 
     # AI behaviour
     ai_disable_hours: int = Field(default=12, alias="AI_DISABLE_HOURS")
@@ -59,7 +108,7 @@ class AppSettings(BaseSettings):
     memory_long_term_limit: int = Field(default=10, alias="MEMORY_LONG_TERM_LIMIT")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -79,7 +128,7 @@ class DatabaseSettings(BaseSettings):
     max_overflow: int = Field(default=10, alias="DB_MAX_OVERFLOW")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -117,7 +166,7 @@ class RedisSettings(BaseSettings):
     message_id_tracker_ttl: int = Field(default=300, alias="REDIS_MSG_ID_TRACKER_TTL")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -147,7 +196,7 @@ class TactoAPISettings(BaseSettings):
     institutional_cache_ttl: int = Field(default=86400, alias="TACTO_INSTITUTIONAL_CACHE_TTL")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -192,7 +241,7 @@ class JoinAPISettings(BaseSettings):
     retry_base_delay: float = Field(default=1.0, alias="JOIN_RETRY_BASE_DELAY")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -215,7 +264,7 @@ class LangSmithSettings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -265,7 +314,7 @@ class GeminiSettings(BaseSettings):
     # -------------------------------------------------------------------------
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -291,7 +340,7 @@ class Settings(BaseSettings):
     langsmith: LangSmithSettings = Field(default_factory=LangSmithSettings)
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILES,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

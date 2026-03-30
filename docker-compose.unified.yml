@@ -1,0 +1,232 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# TACTOFLOW — UNIFIED DOCKER COMPOSE
+# ═══════════════════════════════════════════════════════════════════════════════
+# 
+# Single docker-compose file for all environments using Docker profiles.
+#
+# Usage:
+#   Development: docker compose --profile dev up
+#   Staging:     docker compose --profile staging up
+#   Production:  docker compose --profile prod up
+#
+# Or use the convenience scripts:
+#   ./scripts/dev.sh up
+#   ./scripts/deploy.sh staging
+#   ./scripts/deploy.sh production
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared configurations (YAML anchors)
+# ─────────────────────────────────────────────────────────────────────────────
+x-postgres-common: &postgres-common
+  image: pgvector/pgvector:pg16
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-tacto}"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+
+x-redis-common: &redis-common
+  image: redis:7-alpine
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "redis-cli", "ping"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+
+x-api-common: &api-common
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+
+services:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # DATABASE — PostgreSQL with pgvector
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  postgres:
+    <<: *postgres-common
+    container_name: tactoflow_postgres_${ENVIRONMENT:-dev}
+    environment:
+      POSTGRES_USER: ${DB_USER:-tacto}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-tacto}
+      POSTGRES_DB: ${DB_NAME:-tacto_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - tactoflow_network
+    profiles:
+      - dev
+      - staging
+      - prod
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # CACHE — Redis
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  redis:
+    <<: *redis-common
+    container_name: tactoflow_redis_${ENVIRONMENT:-dev}
+    command: >
+      redis-server 
+      --appendonly yes 
+      --maxmemory ${REDIS_MAXMEMORY:-256mb} 
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - tactoflow_network
+    profiles:
+      - dev
+      - staging
+      - prod
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # API — Development (hot-reload, debug mode)
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  api-dev:
+    <<: *api-common
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tactoflow_api_dev
+    ports:
+      - "8100:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    env_file:
+      - config/environments/.env.development
+    command: uvicorn tacto.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./tacto:/app/tacto
+      - ./config:/app/config:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./scripts:/app/scripts:ro
+    networks:
+      - tactoflow_network
+    profiles:
+      - dev
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # API — Staging (production-like, but with staging credentials)
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  api-staging:
+    <<: *api-common
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: tactoflow_api_staging
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - ENVIRONMENT=staging
+      - DEBUG=false
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    env_file:
+      - config/environments/.env.staging
+    networks:
+      - tactoflow_network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    profiles:
+      - staging
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # API — Production (optimized, security hardened)
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  api-prod:
+    <<: *api-common
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: tactoflow_api_prod
+    restart: always
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    env_file:
+      - config/environments/.env.production
+    networks:
+      - tactoflow_network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+      replicas: 1
+    profiles:
+      - prod
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # NGINX — Reverse Proxy (Production only)
+  # ═══════════════════════════════════════════════════════════════════════════
+  
+  nginx:
+    image: nginx:alpine
+    container_name: tactoflow_nginx_prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api-prod
+    networks:
+      - tactoflow_network
+    profiles:
+      - prod-nginx
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Networks
+# ─────────────────────────────────────────────────────────────────────────────
+networks:
+  tactoflow_network:
+    driver: bridge
+    name: tactoflow_${ENVIRONMENT:-dev}_network
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Volumes
+# ─────────────────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    name: tactoflow_postgres_${ENVIRONMENT:-dev}
+  redis_data:
+    name: tactoflow_redis_${ENVIRONMENT:-dev}
