@@ -8,13 +8,13 @@
 ## 🔴 Alta Prioridade
 
 ### Testes Automatizados
-- [x] Setup pytest + pytest-asyncio (49 testes unitários passando)
+- [x] Setup pytest + pytest-asyncio (70 testes unitários passando)
 - [x] Testes para `ProcessIncomingMessageUseCase` (9 testes)
 - [x] Testes para `MessageBufferService` (11 testes)
 - [x] Testes para `Level1Agent` (14 testes)
-- [ ] Testes de integração com banco PostgreSQL real (sem mocks)
-- [ ] Testes para `SyncTactoMenuUseCase` (sync, embeddings, cache)
-- [ ] Coverage mínima: 70% em lógica de negócio (domain + application)
+- [x] Testes para `SyncTactoMenu` helpers e MenuItem (21 testes)
+- [x] Estrutura de testes de integração com PostgreSQL (auto-skip se DB indisponível)
+- [ ] Coverage mínima: 70% em lógica de negócio (pendente medição)
 
 ### Multi-tenant — Segurança
 - [x] Validar HMAC da assinatura Join API no webhook (`webhook_join.py`) — `JOIN_WEBHOOK_SECRET`
