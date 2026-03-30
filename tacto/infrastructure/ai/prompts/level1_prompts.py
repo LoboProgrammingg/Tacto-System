@@ -247,7 +247,7 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
         rag_context: str = "",
         tacto_address: str = "",
         tacto_hours: str = "",
-        attendant_name: str = "Maria",
+        attendant_name: str = None,  # Uses ATTENDANT_NAME from settings if None
     ) -> str:
         """Build the complete system prompt with three-level memory context."""
         hours_text = tacto_hours.strip() if tacto_hours else cls._format_opening_hours(opening_hours)

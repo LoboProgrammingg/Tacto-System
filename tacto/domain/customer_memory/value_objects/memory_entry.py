@@ -108,6 +108,6 @@ class ConversationMemory:
         lines = []
         for entry in self.short_term[-6:]:
             role = entry.metadata.get("role", "user")
-            prefix = "Cliente" if role == "user" else "Maria"
+            prefix = "Cliente" if role == "user" else "Atendente"
             lines.append(f"{prefix}: {entry.content}")
         return "\n".join(lines)

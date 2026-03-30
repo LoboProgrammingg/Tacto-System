@@ -27,4 +27,4 @@ class AgentContext:
     rag_context: str = ""        # semantic search results (no price)
     tacto_address: str = ""      # address from Tacto rag-full
     tacto_hours: str = ""        # opening hours from Tacto rag-full
-    attendant_name: str = "Maria"  # AI attendant persona name (per-restaurant)
+    attendant_name: str = ""  # AI attendant persona name (from ATTENDANT_NAME env)

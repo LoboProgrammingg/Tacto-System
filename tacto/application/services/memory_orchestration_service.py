@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
+from tacto.config.settings import get_settings
 from tacto.domain.customer_memory.value_objects.memory_entry import (
     ConversationMemory,
     MemoryEntry,
@@ -62,20 +63,25 @@ class MemoryOrchestrationService:
             customer_name=customer_name,
         )
 
+        settings = get_settings()
+
         short_result = await self._short_term.retrieve(
-            restaurant_id, customer_phone, MemoryType.SHORT_TERM, limit=20
+            restaurant_id, customer_phone, MemoryType.SHORT_TERM,
+            limit=settings.app.memory_short_term_limit
         )
         if isinstance(short_result, Success):
             memory.short_term = short_result.value
 
         medium_result = await self._short_term.retrieve(
-            restaurant_id, customer_phone, MemoryType.MEDIUM_TERM, limit=5
+            restaurant_id, customer_phone, MemoryType.MEDIUM_TERM,
+            limit=settings.app.memory_medium_term_limit
         )
         if isinstance(medium_result, Success):
             memory.medium_term = medium_result.value
 
         long_result = await self._long_term.retrieve(
-            restaurant_id, customer_phone, MemoryType.LONG_TERM, limit=10
+            restaurant_id, customer_phone, MemoryType.LONG_TERM,
+            limit=settings.app.memory_long_term_limit
         )
         if isinstance(long_result, Success):
             memory.long_term = long_result.value

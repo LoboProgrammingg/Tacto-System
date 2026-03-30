@@ -46,6 +46,18 @@ class AppSettings(BaseSettings):
     # Example: "https://app.example.com,https://admin.example.com"
     cors_origins: str = Field(default="", alias="CORS_ORIGINS")
 
+    # AI Assistant Identity
+    attendant_name: str = Field(default="Maria", alias="ATTENDANT_NAME")
+
+    # Circuit Breaker settings
+    circuit_breaker_failure_threshold: int = Field(default=5, alias="CIRCUIT_BREAKER_FAILURE_THRESHOLD")
+    circuit_breaker_recovery_timeout: float = Field(default=30.0, alias="CIRCUIT_BREAKER_RECOVERY_TIMEOUT")
+
+    # Memory retrieval limits
+    memory_short_term_limit: int = Field(default=20, alias="MEMORY_SHORT_TERM_LIMIT")
+    memory_medium_term_limit: int = Field(default=5, alias="MEMORY_MEDIUM_TERM_LIMIT")
+    memory_long_term_limit: int = Field(default=10, alias="MEMORY_LONG_TERM_LIMIT")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -236,6 +236,7 @@ class ProcessIncomingMessageUseCase:
             rag_context=rag_context,
             tacto_address=tacto_address,
             tacto_hours=tacto_hours,
+            attendant_name=_settings.app.attendant_name,
         )
 
         response_result = await self._ai_agent.process(
