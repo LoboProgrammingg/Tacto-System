@@ -27,7 +27,7 @@ def upgrade() -> None:
             "timezone",
             sa.String(63),
             nullable=False,
-            server_default="America/Sao_Paulo",
+            server_default="America/Cuiaba",
         ),
     )
 

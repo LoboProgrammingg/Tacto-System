@@ -36,10 +36,30 @@ def setup_middlewares(app: FastAPI) -> None:
     app.add_middleware(LoggingMiddleware)
 
     # 4. CORS — outermost, handles preflight before any other check
+    # Priority: CORS_ORIGINS > DEBUG mode default
+    cors_origins = _get_cors_origins(settings)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.app.debug else [],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+def _get_cors_origins(settings) -> list[str]:
+    """
+    Determine CORS allowed origins.
+
+    Priority:
+    1. CORS_ORIGINS env var (comma-separated list)
+    2. DEBUG=true → ["*"] (allow all)
+    3. DEBUG=false + no CORS_ORIGINS → [] (deny all)
+    """
+    if settings.app.cors_origins:
+        # Parse comma-separated origins, strip whitespace
+        origins = [o.strip() for o in settings.app.cors_origins.split(",") if o.strip()]
+        return origins
+
+    # Fallback to debug-based default
+    return ["*"] if settings.app.debug else []

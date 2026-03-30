@@ -23,7 +23,7 @@ class CreateRestaurantDTO:
     empresa_base_id: str
     integration_type: int = 2  # JOIN
     automation_type: int = 1  # BASIC
-    timezone: str = "America/Sao_Paulo"
+    timezone: str = "America/Cuiaba"
 
 
 @dataclass(frozen=True, slots=True)

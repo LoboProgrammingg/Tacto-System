@@ -53,7 +53,7 @@ def mock_restaurant() -> Restaurant:
         chave_grupo_empresarial=uuid4(),
         canal_master_id="restaurante_teste",
         empresa_base_id="1",
-        timezone="America/Sao_Paulo",
+        timezone="America/Cuiaba",
     )
 
 

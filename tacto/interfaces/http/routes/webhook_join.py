@@ -1,12 +1,13 @@
 """Join Webhook Handler.
 
 Decision flow:
-  1. Ignore non "messages.upsert" events
-  2. Ignore group messages (@g.us)
-  3. fromMe=true → check if AI-sent (ignore) or human operator (disable AI 12h)
-  4. Extract text — ignore media
-  5. Buffer messages (5s window) to combine rapid consecutive messages
-  6. Route to ProcessIncomingMessageUseCase
+  1. Validate HMAC signature (if configured)
+  2. Ignore non "messages.upsert" events
+  3. Ignore group messages (@g.us)
+  4. fromMe=true → check if AI-sent (ignore) or human operator (disable AI 12h)
+  5. Extract text — ignore media
+  6. Buffer messages (5s window) to combine rapid consecutive messages
+  7. Route to ProcessIncomingMessageUseCase
 
 Human Operator Detection (fromMe=true):
   - When fromMe=true, the message was sent FROM the instance's connected phone
@@ -15,16 +16,21 @@ Human Operator Detection (fromMe=true):
     1. Check Redis SentMessageTracker (message_id or phone)
     2. If found → AI echo → ignore
     3. If NOT found → human operator → disable AI 12h
+
+Security:
+  - HMAC-SHA256 signature validation via X-Hub-Signature-256 header
+  - Set JOIN_WEBHOOK_SECRET in .env to enable
 """
 
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 
 from tacto.application.dto.message_dto import IncomingMessageDTO
 from tacto.application.services.message_buffer_service import MessageBufferService
 from tacto.infrastructure.messaging.instance_phone_cache import InstancePhoneCache
+from tacto.interfaces.http.middlewares.webhook_security import validate_webhook_signature
 from tacto.interfaces.http.schemas.webhook import WebhookResponse
 
 
@@ -40,6 +46,7 @@ router = APIRouter()
     status_code=status.HTTP_200_OK,
     summary="Join Developer Webhook",
     description="Receives WhatsApp events from Join Developer API",
+    dependencies=[Depends(validate_webhook_signature)],
 )
 async def join_webhook(
     request: Request,

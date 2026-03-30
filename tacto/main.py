@@ -22,6 +22,32 @@ from tacto.interfaces.http.routes import router as api_router
 logger = structlog.get_logger()
 
 
+def _validate_security_settings(settings: Settings) -> None:
+    """
+    Validate critical security settings at startup.
+
+    Raises RuntimeError if insecure defaults are used in production.
+    """
+    if settings.app.debug:
+        # In debug mode, allow insecure defaults with warning
+        if settings.app.secret_key == "change-me-in-production":
+            logger.warning(
+                "Using default SECRET_KEY in debug mode. "
+                "Set SECRET_KEY env var before deploying to production."
+            )
+        return
+
+    # Production mode (DEBUG=false) — enforce secure configuration
+    if settings.app.secret_key == "change-me-in-production":
+        raise RuntimeError(
+            "SECURITY ERROR: Cannot start in production mode with default SECRET_KEY. "
+            "Set SECRET_KEY environment variable to a secure random value. "
+            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        )
+
+    logger.info("Security settings validated")
+
+
 def _configure_langsmith(settings: Settings) -> None:
     """
     Configure LangSmith tracing at startup.
@@ -54,12 +80,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Application lifespan manager.
 
     Handles startup and shutdown events for:
+    - Security validation
     - Database connections
     - Redis connections
     - External API clients
     """
     settings = get_settings()
     logger.info("Starting TactoFlow", version=settings.app.version)
+
+    # Validate security settings FIRST — fail fast if misconfigured
+    _validate_security_settings(settings)
 
     _configure_langsmith(settings)
 

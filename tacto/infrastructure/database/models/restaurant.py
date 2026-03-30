@@ -77,7 +77,7 @@ class RestaurantModel(Base, TimestampMixin):
     timezone: Mapped[str] = mapped_column(
         String(63),
         nullable=False,
-        default="America/Sao_Paulo",
+        default="America/Cuiaba",
     )
 
     is_active: Mapped[bool] = mapped_column(

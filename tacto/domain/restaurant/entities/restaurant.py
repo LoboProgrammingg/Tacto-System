@@ -47,7 +47,7 @@ class Restaurant:
     chave_grupo_empresarial: UUID
     canal_master_id: str
     empresa_base_id: str
-    timezone: str = "America/Sao_Paulo"
+    timezone: str = "America/Cuiaba"
     is_active: bool = True
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -176,7 +176,7 @@ class Restaurant:
         chave_grupo_empresarial: UUID,
         canal_master_id: str,
         empresa_base_id: str,
-        timezone: str = "America/Sao_Paulo",
+        timezone: str = "America/Cuiaba",
         restaurant_id: Optional[RestaurantId] = None,
     ) -> "Restaurant":
         """

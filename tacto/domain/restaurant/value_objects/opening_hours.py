@@ -156,7 +156,7 @@ class OpeningHours:
         }
         return schedules[day]
 
-    def is_open_now(self, tz: str = "America/Sao_Paulo") -> bool:
+    def is_open_now(self, tz: str = "America/Cuiaba") -> bool:
         """Check if restaurant is currently open in the given timezone."""
         now = datetime.now(ZoneInfo(tz))
         today = DayOfWeek.from_datetime(now)
@@ -169,7 +169,7 @@ class OpeningHours:
         schedule = self.get_schedule(today)
         return schedule.formatted_hours
 
-    def get_next_opening(self, tz: str = "America/Sao_Paulo") -> str:
+    def get_next_opening(self, tz: str = "America/Cuiaba") -> str:
         """
         Get humanized string for next opening time.
 
@@ -209,7 +209,7 @@ class OpeningHours:
         # Fallback if no opening found
         return "Consulte nossos horários de funcionamento"
 
-    def get_next_opening_utc(self, tz: str = "America/Sao_Paulo") -> Optional[datetime]:
+    def get_next_opening_utc(self, tz: str = "America/Cuiaba") -> Optional[datetime]:
         """
         Return the UTC datetime of the next restaurant opening.
 

@@ -1,6 +1,6 @@
 # TODO — Tacto System
 
-**Última atualização:** 2026-03-29
+**Última atualização:** 2026-03-30
 **Critério:** Itens pendentes de implementação confirmados — código, infra e produto.
 
 ---
@@ -8,17 +8,18 @@
 ## 🔴 Alta Prioridade
 
 ### Testes Automatizados
-- [ ] Setup pytest + pytest-asyncio com banco PostgreSQL real (sem mocks)
-- [ ] Testes de integração para `ProcessIncomingMessageUseCase`
-- [ ] Testes para `MessageBufferService` (burst, deduplicação, fallback sem Redis)
-- [ ] Testes para `Level1Agent` (resposta fechado, handoff, RAG trigger, menu URL)
+- [x] Setup pytest + pytest-asyncio (49 testes unitários passando)
+- [x] Testes para `ProcessIncomingMessageUseCase` (9 testes)
+- [x] Testes para `MessageBufferService` (11 testes)
+- [x] Testes para `Level1Agent` (14 testes)
+- [ ] Testes de integração com banco PostgreSQL real (sem mocks)
 - [ ] Testes para `SyncTactoMenuUseCase` (sync, embeddings, cache)
 - [ ] Coverage mínima: 70% em lógica de negócio (domain + application)
 
 ### Multi-tenant — Segurança
-- [ ] Validar HMAC da assinatura Join API no webhook (`webhook_join.py`) — atualmente aceita qualquer POST
-- [ ] CORS em produção: substituir `[]` por whitelist explícita de origens (`CORS_ORIGINS` no `.env`)
-- [ ] `secret_key` padrão "change-me-in-production" deve ser validado na startup — lançar erro se não alterado em `DEBUG=false`
+- [x] Validar HMAC da assinatura Join API no webhook (`webhook_join.py`) — `JOIN_WEBHOOK_SECRET`
+- [x] CORS em produção: whitelist configurável via `CORS_ORIGINS` no `.env`
+- [x] `secret_key` padrão "change-me-in-production" validado na startup — lança erro se não alterado em `DEBUG=false`
 
 ---
 

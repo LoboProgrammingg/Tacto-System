@@ -34,13 +34,17 @@ class AppSettings(BaseSettings):
     )
 
     # Locale defaults
-    default_timezone: str = Field(default="America/Sao_Paulo", alias="DEFAULT_TIMEZONE")
+    default_timezone: str = Field(default="America/Cuiaba", alias="DEFAULT_TIMEZONE")
 
     # Security — API Key auth (empty = disabled)
     api_key: str = Field(default="", alias="API_KEY")
 
     # Rate limiting — requests per minute per IP (0 = disabled)
     rate_limit_rpm: int = Field(default=60, alias="RATE_LIMIT_RPM")
+
+    # CORS — comma-separated list of allowed origins (empty = use debug mode default)
+    # Example: "https://app.example.com,https://admin.example.com"
+    cors_origins: str = Field(default="", alias="CORS_ORIGINS")
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -161,6 +165,10 @@ class JoinAPISettings(BaseSettings):
     token_cliente: str = Field(default="", alias="JOIN_TOKEN_CLIENTE")
     http_timeout: int = Field(default=30, alias="JOIN_HTTP_TIMEOUT")
 
+    # Webhook security — HMAC signature validation
+    # If set, all webhook requests must include valid X-Hub-Signature-256 header
+    webhook_secret: str = Field(default="", alias="JOIN_WEBHOOK_SECRET")
+
     # Typing simulation (humanized delay before sending)
     typing_chars_per_sec: int = Field(default=40, alias="JOIN_TYPING_CHARS_PER_SEC")
     typing_variance: float = Field(default=0.20, alias="JOIN_TYPING_VARIANCE")
@@ -177,6 +185,11 @@ class JoinAPISettings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    @property
+    def hmac_enabled(self) -> bool:
+        """Check if HMAC validation is enabled."""
+        return bool(self.webhook_secret)
 
 
 class LangSmithSettings(BaseSettings):
