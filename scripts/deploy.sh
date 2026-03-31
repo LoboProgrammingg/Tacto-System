@@ -46,20 +46,27 @@ docker build \
     -t "$IMAGE_TAG" \
     .
 
-echo ">>> Parando API para rodar migrations..."
-docker stop "$CONTAINER_API" 2>/dev/null || true
+echo ">>> Subindo infra (postgres + redis)..."
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d postgres redis
+
+echo ">>> Aguardando postgres ficar pronto..."
+for i in $(seq 1 30); do
+    if docker exec "$CONTAINER_DB" pg_isready -U tacto -d tacto_db -q 2>/dev/null; then
+        echo ">>> Postgres pronto após ${i}s"
+        break
+    fi
+    if [ "$i" = "30" ]; then
+        echo "ERRO: Postgres não ficou pronto em 30s"
+        exit 1
+    fi
+    sleep 1
+done
 
 echo ">>> Rodando migrations Alembic..."
-docker run --rm \
-    --env-file "$ENV_FILE" \
-    --network "$(docker network ls --filter name=tactoflow --format '{{.Name}}' | grep "$ENV" | head -1 || echo tactoflow_network)" \
-    "$IMAGE_TAG" \
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" run --rm --no-deps api \
     python -m alembic upgrade head
 
-echo ">>> Subindo containers..."
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-build
-
-echo ">>> Atualizando imagem da API..."
+echo ">>> Subindo API..."
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-deps api
 
 echo ">>> Aguardando health check..."
