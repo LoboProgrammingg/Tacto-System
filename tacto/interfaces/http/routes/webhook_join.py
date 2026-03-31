@@ -139,19 +139,8 @@ async def join_webhook(
                 log.debug("ai_echo_ignored", message_id=message_id, source=source)
                 return WebhookResponse(success=True, message="AI echo ignored")
 
-            # NOT confirmed as AI echo — but Join API doesn't return message_id on send,
-            # so hash is the only tracker. Only treat as human operator if source="app"
-            # (physical device) AND there's actual text content (not a status/system message).
-            # Unidentifiable fromMe messages (source="api", empty text, etc.) are silently ignored
-            # to avoid false positives that disable AI incorrectly.
-            is_likely_human = (
-                source == "app"  # sent from physical device, not via API
-                and echo_text is not None
-                and len(echo_text.strip()) > 0
-                and remote_jid  # has a recipient (not a status update)
-            )
-
-            if is_likely_human and customer_phone:
+            # NOT an AI echo → human operator sent this manually (fromMe=True path)
+            if customer_phone:
                 dto = IncomingMessageDTO(
                     instance_key=instance,
                     from_phone=customer_phone,
@@ -171,10 +160,7 @@ async def join_webhook(
                     sender=clean_sender,
                     source=source,
                 )
-                return WebhookResponse(success=True, message="Operator message — AI paused 12h")
-
-            log.debug("from_me_unidentified_ignored", source=source, has_text=echo_text is not None)
-            return WebhookResponse(success=True, message="fromMe ignored — not confirmed human")
+            return WebhookResponse(success=True, message="Operator message — AI paused 12h")
 
         # ── Step 4: Extract text content ──────────────────────────────────
         message: dict[str, Any] = data.get("message", {})
