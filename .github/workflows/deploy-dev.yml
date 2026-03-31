@@ -1,0 +1,42 @@
+name: Deploy — Dev
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  deploy:
+    name: Deploy to Dev (SSH)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            echo "=== [DEV] Atualizando código ==="
+            mkdir -p /root/Tacto-System-dev
+            cd /root/Tacto-System-dev
+            git init 2>/dev/null || true
+            git remote add origin git@github.com:LoboProgrammingg/Tacto-System.git 2>/dev/null || true
+            git fetch origin dev
+            git reset --hard origin/dev
+
+            echo "=== [DEV] Escrevendo .env ==="
+            cat > /root/Tacto-System-dev/.env.dev << 'ENVEOF'
+            ${{ secrets.ENV_DEV }}
+            ENVEOF
+
+            echo "=== [DEV] Build e deploy ==="
+            bash /root/Tacto-System-dev/scripts/deploy.sh dev
+
+            echo "=== [DEV] Deploy concluído ==="

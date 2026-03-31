@@ -1,0 +1,89 @@
+# ============================================
+# TactoFlow Dev Docker Compose
+# Portas separadas de prod para rodar em paralelo:
+#   API  → 8001 (prod usa 8000)
+#   DB   → 5434 (prod usa 5432 interno / sem expose)
+#   Redis→ 6381 (prod usa 6379 interno / sem expose)
+# ============================================
+
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: tactoflow_postgres_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-tacto}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:-tacto_db_dev}
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-tacto} -d ${DB_NAME:-tacto_db_dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tactoflow_dev_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: tactoflow_redis_dev
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis_data_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - tactoflow_dev_network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    image: tacto-system-api:dev
+    container_name: tactoflow_api_dev
+    restart: unless-stopped
+    env_file:
+      - .env.dev
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      DEBUG: "true"
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - tactoflow_dev_network
+
+networks:
+  tactoflow_dev_network:
+    driver: bridge
+
+volumes:
+  postgres_data_dev:
+    driver: local
+  redis_data_dev:
+    driver: local

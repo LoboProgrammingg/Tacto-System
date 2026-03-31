@@ -38,8 +38,12 @@ venv.bak/
 # Environment variables (secrets - never commit)
 .env
 .env.local
+.env.prod
+.env.dev
 .env.production
 .env.staging
+config/environments/.env.prod
+config/environments/.env.dev
 config/environments/.env.staging
 config/environments/.env.production
 

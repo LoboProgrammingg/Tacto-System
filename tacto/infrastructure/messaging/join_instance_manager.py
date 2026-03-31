@@ -248,17 +248,22 @@ class JoinInstanceManager:
         webhook_url: str,
         events: Optional[list[str]] = None,
     ) -> Success[bool] | Failure[Exception]:
-        """Configure webhook URL for an instance."""
+        """Configure webhook URL for an instance.
+
+        POST /webhook/configurarinstancia
+        Headers: tokenCliente, instancia (instance name)
+        Body: {"url": webhook_url}
+        """
         try:
             self._ensure_client()
 
             response = await self._client.post(
-                "/webhook/configurar",
-                json={
-                    "chave": instance_key,
-                    "webhookUrl": webhook_url,
-                    "eventos": events or ["messages.upsert", "connection.update"],
+                "/webhook/configurarinstancia",
+                headers={
+                    **self._get_headers(),
+                    "instancia": instance_key,
                 },
+                json={"url": webhook_url},
             )
             response.raise_for_status()
 

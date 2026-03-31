@@ -1,0 +1,39 @@
+name: Deploy — Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Production (SSH)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            echo "=== [PROD] Atualizando código ==="
+            cd /root/Tacto-System
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "=== [PROD] Escrevendo .env ==="
+            cat > /root/Tacto-System/.env.prod << 'ENVEOF'
+            ${{ secrets.ENV_PROD }}
+            ENVEOF
+
+            echo "=== [PROD] Build e deploy ==="
+            bash /root/Tacto-System/scripts/deploy.sh prod
+
+            echo "=== [PROD] Deploy concluído ==="
