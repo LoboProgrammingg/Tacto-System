@@ -9,13 +9,18 @@ Decision flow:
   6. Buffer messages (5s window) to combine rapid consecutive messages
   7. Route to ProcessIncomingMessageUseCase
 
-Human Operator Detection (fromMe=true):
-  - When fromMe=true, the message was sent FROM the instance's connected phone
-  - remoteJid is always the RECIPIENT (customer's phone)
-  - To distinguish AI vs human:
-    1. Check Redis SentMessageTracker (message_id or phone)
-    2. If found → AI echo → ignore
-    3. If NOT found → human operator → disable AI 12h
+Human Operator Detection (two paths):
+  Path A — fromMe=True:
+    - remoteJid = RECIPIENT (customer's phone)
+    - Check SentMessageTracker (message_id or content hash)
+    - If found → AI echo → ignore
+    - If NOT found → human operator → disable AI 12h
+    - Also: cache sender phone → InstancePhoneCache (for Path B)
+
+  Path B — fromMe=False but sender IS the instance phone:
+    - Join API sometimes sends fromMe=False for messages from the physical device
+    - Compare sender phone against InstancePhoneCache
+    - If match → human operator → disable AI 12h
 
 Security:
   - HMAC-SHA256 signature validation via X-Hub-Signature-256 header
@@ -63,17 +68,20 @@ async def join_webhook(
 
         event: str = body.get("event", "")
         instance: str = body.get("instance", "")
-        log = logger.bind(event=event, instance=instance)
-
-        # ── Step 1: Only process messages.upsert ─────────────────────────
-        if event != "messages.upsert":
-            log.debug("webhook_event_ignored", reason="not_messages_upsert")
-            return WebhookResponse(success=True, message="Event ignored")
+        log = logger.bind(webhook_event=event, instance=instance)
 
         data: dict[str, Any] = body.get("data", {})
         key: dict[str, Any] = data.get("key", {})
         from_me: bool = key.get("fromMe", False)
         message_id: str = key.get("id", "")
+
+        # ── Step 1: Ignore irrelevant events but allow send.message from operator ──
+        if event != "messages.upsert":
+            if event == "send.message" and from_me:
+                pass  # Human operator response from another client
+            else:
+                log.debug("webhook_event_ignored", reason="not_messages_upsert")
+                return WebhookResponse(success=True, message="Event ignored")
         remote_jid: str = key.get("remoteJid", "") or key.get("remoteJidAlt", "")
         
         # ── Step 2: Ignore group messages ─────────────────────────────────
@@ -84,41 +92,72 @@ async def join_webhook(
         push_name: str = data.get("pushName", "")
         timestamp: int = data.get("messageTimestamp", 0)
 
-        # ── Step 3: fromMe=true → check if AI-sent or human operator ─────────
-        if from_me:
-            # Key fields for detection:
-            # - sender: restaurant's connected phone (e.g., "554187273618@s.whatsapp.net")
-            # - remoteJid: customer's phone (the recipient)
-            # - source: "web" = WhatsApp Web, "android"/"ios" = mobile app
-            sender: str = body.get("sender", "")
+        # ── DEBUG: log raw fields to diagnose operator detection ──────────
+        log.debug(
+            "webhook_raw_fields",
+            from_me=from_me,
+            remote_jid=remote_jid,
+            sender=body.get("sender", ""),
+            source=data.get("source", ""),
+            push_name=push_name,
+            message_id=message_id,
+            participant=data.get("participant", "") or key.get("participant", ""),
+        )
+
+        # ── Step 3: fromMe=true OR sender is instance → check if AI-sent or human operator ─────────
+        sender: str = body.get("sender", "")
+        clean_sender: str = sender.split("@")[0] if "@" in sender else sender
+
+        is_operator_message = from_me
+
+        if clean_sender:
+            redis_client_step3 = getattr(request.app.state, "redis", None)
+            if redis_client_step3 and redis_client_step3.is_connected:
+                phone_cache = InstancePhoneCache(redis_client_step3)
+                if from_me:
+                    # Cache the instance's own phone number logic.
+                    await phone_cache.set_instance_phone(instance, clean_sender)
+                else:
+                    # Check if the message is coming from the known instance phone even if fromMe is false
+                    if await phone_cache.is_instance_phone(instance, clean_sender):
+                        is_operator_message = True
+
+        if is_operator_message:
             source: str = data.get("source", "")
-            
-            log.debug(
-                "from_me_detection",
-                sender=sender,
-                remote_jid=remote_jid,
-                source=source,
-                message_id=message_id,
-            )
-            
-            # Check if this is an AI echo (message we sent via API)
+
+            # Extract echo text to compare with AI-sent content hash
+            echo_message: dict[str, Any] = data.get("message", {})
+            echo_message_type: str = data.get("messageType", "")
+            echo_text: str | None = _extract_text(echo_message, echo_message_type) or None
+
             customer_phone = remote_jid.split("@")[0] if "@" in remote_jid else None
-            is_ai_message = await _check_if_ai_sent_message(request, instance, message_id, customer_phone)
-            
+            is_ai_message = await _check_if_ai_sent_message(
+                request, instance, message_id, customer_phone, echo_text
+            )
+
             if is_ai_message:
-                log.debug("ai_echo_ignored", message_id=message_id)
-                return WebhookResponse(success=True, message="AI message ignored")
-            
-            # NOT an AI message → human operator sent this manually
-            # This happens when someone types on WhatsApp Web/App/Desktop/Mobile
-            # ALWAYS use "human_operator" source to trigger AI disable (12h)
-            if customer_phone:
+                log.debug("ai_echo_ignored", message_id=message_id, source=source)
+                return WebhookResponse(success=True, message="AI echo ignored")
+
+            # NOT confirmed as AI echo — but Join API doesn't return message_id on send,
+            # so hash is the only tracker. Only treat as human operator if source="app"
+            # (physical device) AND there's actual text content (not a status/system message).
+            # Unidentifiable fromMe messages (source="api", empty text, etc.) are silently ignored
+            # to avoid false positives that disable AI incorrectly.
+            is_likely_human = (
+                source == "app"  # sent from physical device, not via API
+                and echo_text is not None
+                and len(echo_text.strip()) > 0
+                and remote_jid  # has a recipient (not a status update)
+            )
+
+            if is_likely_human and customer_phone:
                 dto = IncomingMessageDTO(
                     instance_key=instance,
                     from_phone=customer_phone,
                     body="__human_operator__",
                     from_me=True,
-                    source="human_operator",  # Forces AI disable regardless of device
+                    source="human_operator",
                     timestamp=timestamp,
                     message_id=message_id,
                     push_name=push_name,
@@ -129,10 +168,13 @@ async def join_webhook(
                 log.info(
                     "human_operator_detected",
                     customer_phone=customer_phone,
-                    sender=sender.split("@")[0] if sender else None,
+                    sender=clean_sender,
                     source=source,
                 )
-            return WebhookResponse(success=True, message="Operator message — AI paused 12h")
+                return WebhookResponse(success=True, message="Operator message — AI paused 12h")
+
+            log.debug("from_me_unidentified_ignored", source=source, has_text=echo_text is not None)
+            return WebhookResponse(success=True, message="fromMe ignored — not confirmed human")
 
         # ── Step 4: Extract text content ──────────────────────────────────
         message: dict[str, Any] = data.get("message", {})
@@ -153,9 +195,39 @@ async def join_webhook(
             log.warning("webhook_sender_extraction_failed", remote_jid=remote_jid)
             return WebhookResponse(success=True, message="Cannot extract phone")
 
-        # ── Step 6: Buffer message and schedule processing ───────────────
+        # ── Step 5b: Detect operator via phone cache (fromMe=False edge case) ─
+        # Join API sometimes sends fromMe=False for messages sent from the physical
+        # device (not via API). We compare the sender's phone against the cached
+        # instance phone to catch this case.
         redis_client = getattr(request.app.state, "redis", None)
         tacto_client = getattr(request.app.state, "tacto_client", None)
+
+        if clean_sender and redis_client and redis_client.is_connected:
+            phone_cache = InstancePhoneCache(redis_client)
+            if await phone_cache.is_instance_phone(instance, clean_sender):
+                # The 'remote_jid' contains the customer's phone if the operator is talking to them.
+                customer_phone = remote_jid.split("@")[0] if "@" in remote_jid else None
+                if customer_phone:
+                    dto = IncomingMessageDTO(
+                        instance_key=instance,
+                        from_phone=customer_phone,
+                        body="__human_operator__",
+                        from_me=False,
+                        source="human_operator",
+                        timestamp=timestamp,
+                        message_id=message_id,
+                        push_name=push_name,
+                    )
+                    background_tasks.add_task(_process_message_background, dto, redis_client, tacto_client)
+                    log.info(
+                        "human_operator_detected_via_sender",
+                        sender=clean_sender,
+                        instance=instance,
+                        customer_phone=customer_phone,
+                    )
+                    return WebhookResponse(success=True, message="Operator message (sender match) — AI paused 12h")
+
+        # ── Step 6: Buffer message and schedule processing ───────────────
         
         # Add message to buffer and schedule delayed processing
         background_tasks.add_task(
@@ -221,16 +293,17 @@ async def _check_if_ai_sent_message(
     instance_key: str,
     message_id: str,
     phone: str | None = None,
+    echo_text: str | None = None,
 ) -> bool:
-    """Check if message was sent by AI (by message_id or phone number)."""
+    """Check if from_me=True message was sent by AI (not by a human operator)."""
     from tacto.infrastructure.messaging.sent_message_tracker import SentMessageTracker
-    
+
     redis_client = getattr(request.app.state, "redis", None)
     if not redis_client or not redis_client.is_connected:
-        return True  # Assume AI to avoid false positives
-    
+        return True  # Redis down: assume AI echo to avoid false disable
+
     tracker = SentMessageTracker(redis_client)
-    return await tracker.is_ai_sent_message(instance_key, message_id, phone)
+    return await tracker.is_ai_sent_message(instance_key, message_id, phone, echo_text)
 
 
 _MEDIA_TYPES = {
