@@ -447,3 +447,391 @@ class TactoMenuProvider(MenuProvider):
         if entrega := data.get("info_entrega", data.get("delivery_info")):
             lines.append(f"Entrega: {entrega}")
         return "\n".join(lines)
+
+    # ------------------------------------------------------------------ #
+    # Level 2 Enhanced Methods (Order Taking)                            #
+    # ------------------------------------------------------------------ #
+
+    async def search_menu_with_prices(
+        self,
+        restaurant_id: RestaurantId,
+        query: str,
+        limit: int = 30,
+        empresa_base_id: Optional[str] = None,
+        grupo_empresarial: Optional[str] = None,
+    ) -> Success[list[dict]] | Failure[Exception]:
+        """
+        Search menu items with full price information for Level 2 agent.
+
+        Returns items with all variations and prices for accurate order taking.
+        Uses fuzzy matching for better item recognition.
+
+        Returns list of dicts with:
+            - name: str
+            - category: str
+            - description: str | None
+            - price: float (base price)
+            - variations: list[{name, price}]
+            - is_available: bool
+        """
+        menu_result = await self.get_menu(
+            restaurant_id,
+            empresa_base_id=empresa_base_id,
+            grupo_empresarial=grupo_empresarial,
+        )
+        if isinstance(menu_result, Failure):
+            return menu_result
+
+        query_lower = query.lower().strip()
+        query_words = set(query_lower.split())
+        matching: list[dict] = []
+
+        cache_key = self._cache_key("menu", restaurant_id)
+        cached_raw = await self._get_cached(cache_key)
+
+        if not cached_raw:
+            return Ok([])
+
+        cardapio = cached_raw.get("cardapio", cached_raw.get("itens", cached_raw.get("items", [])))
+
+        for item_data in cardapio:
+            if not item_data.get("disponivel", item_data.get("available", True)):
+                continue
+
+            name = (
+                item_data.get("nomeCompleto")
+                or item_data.get("nome")
+                or item_data.get("name")
+                or ""
+            )
+            name_lower = name.lower()
+
+            category = item_data.get("grupo") or item_data.get("categoria") or "Outros"
+            description = (
+                item_data.get("textoInformativo")
+                or item_data.get("descricao")
+                or item_data.get("description")
+            )
+
+            score = self._calculate_match_score(query_lower, query_words, name_lower, description)
+
+            if score > 0:
+                variations = self._extract_variations(item_data)
+                base_price = self._extract_price(item_data)
+
+                matching.append({
+                    "name": name,
+                    "category": category,
+                    "description": description,
+                    "price": base_price,
+                    "variations": variations,
+                    "is_available": True,
+                    "match_score": score,
+                })
+
+        matching.sort(key=lambda x: x["match_score"], reverse=True)
+
+        for item in matching[:limit]:
+            item.pop("match_score", None)
+
+        return Ok(matching[:limit])
+
+    def _calculate_match_score(
+        self,
+        query_lower: str,
+        query_words: set[str],
+        name_lower: str,
+        description: Optional[str],
+    ) -> float:
+        """
+        Calculate relevance score for fuzzy matching.
+
+        Higher score = better match.
+        """
+        score = 0.0
+
+        if query_lower == name_lower:
+            return 100.0
+
+        if query_lower in name_lower:
+            score += 50.0
+
+        name_words = set(name_lower.split())
+        common_words = query_words & name_words
+        if common_words:
+            score += len(common_words) * 20.0
+
+        for word in query_words:
+            if len(word) >= 3:
+                for name_word in name_words:
+                    if word in name_word or name_word in word:
+                        score += 10.0
+                        break
+
+        if description:
+            desc_lower = description.lower()
+            if query_lower in desc_lower:
+                score += 5.0
+
+        return score
+
+    def _extract_variations(self, item_data: dict) -> list[dict]:
+        """Extract all size/variation options with prices."""
+        variations = []
+
+        tamanhos = item_data.get("tamanhos", [])
+        for tam in tamanhos:
+            nome = tam.get("nome") or tam.get("tamanho") or tam.get("descricao") or ""
+            preco = float(tam.get("preco", 0))
+            if nome and preco > 0:
+                variations.append({"name": nome, "price": preco})
+
+        variacoes = item_data.get("variacoes", [])
+        for var in variacoes:
+            nome = var.get("nome") or var.get("descricao") or ""
+            preco = float(var.get("preco", 0))
+            if nome and preco > 0:
+                variations.append({"name": nome, "price": preco})
+
+        return variations
+
+    async def get_item_by_name(
+        self,
+        restaurant_id: RestaurantId,
+        item_name: str,
+        variation: Optional[str] = None,
+        empresa_base_id: Optional[str] = None,
+        grupo_empresarial: Optional[str] = None,
+    ) -> Success[Optional[dict]] | Failure[Exception]:
+        """
+        Get exact item by name with price.
+
+        Used by Level 2 agent to confirm items before adding to cart.
+
+        Args:
+            restaurant_id: Restaurant ID
+            item_name: Exact or partial item name
+            variation: Optional size/variation name
+
+        Returns:
+            Item dict with name, price, variation or None if not found
+        """
+        search_result = await self.search_menu_with_prices(
+            restaurant_id,
+            item_name,
+            limit=5,
+            empresa_base_id=empresa_base_id,
+            grupo_empresarial=grupo_empresarial,
+        )
+
+        if isinstance(search_result, Failure):
+            return search_result
+
+        items = search_result.value
+        if not items:
+            return Ok(None)
+
+        best_match = items[0]
+
+        if variation and best_match.get("variations"):
+            variation_lower = variation.lower().strip()
+            for var in best_match["variations"]:
+                if variation_lower in var["name"].lower():
+                    return Ok({
+                        "name": best_match["name"],
+                        "variation": var["name"],
+                        "price": var["price"],
+                        "category": best_match["category"],
+                        "description": best_match.get("description"),
+                    })
+
+        if best_match.get("variations"):
+            first_var = best_match["variations"][0]
+            return Ok({
+                "name": best_match["name"],
+                "variation": first_var["name"],
+                "price": first_var["price"],
+                "category": best_match["category"],
+                "description": best_match.get("description"),
+            })
+
+        return Ok({
+            "name": best_match["name"],
+            "variation": None,
+            "price": best_match["price"],
+            "category": best_match["category"],
+            "description": best_match.get("description"),
+        })
+
+    def build_rag_context_with_prices(self, items: list[dict]) -> str:
+        """
+        Build RAG context string with prices for Level 2 prompt.
+
+        Args:
+            items: List of menu items from search_menu_with_prices
+
+        Returns:
+            Formatted string for prompt injection
+        """
+        if not items:
+            return "Cardápio não disponível no momento."
+
+        by_category: dict[str, list[dict]] = {}
+        for item in items:
+            category = item.get("category", "Outros")
+            by_category.setdefault(category, []).append(item)
+
+        lines = []
+        for category in sorted(by_category.keys()):
+            lines.append(f"\n### {category}")
+            for item in by_category[category]:
+                name = item.get("name", "")
+                description = item.get("description", "")
+                variations = item.get("variations", [])
+
+                if variations:
+                    for var in variations:
+                        var_name = var.get("name", "")
+                        var_price = var.get("price", 0)
+                        line = f"- {name} ({var_name}): R$ {var_price:.2f}"
+                        if description:
+                            line += f" — {description[:80]}"
+                        lines.append(line)
+                else:
+                    price = item.get("price", 0)
+                    line = f"- {name}: R$ {price:.2f}"
+                    if description:
+                        line += f" — {description[:80]}"
+                    lines.append(line)
+
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------ #
+    # Level 2 Semantic Search with Prices (pgvector + Tacto API)         #
+    # ------------------------------------------------------------------ #
+
+    async def enrich_pgvector_results_with_prices(
+        self,
+        restaurant_id: RestaurantId,
+        pgvector_results: list[dict],
+        empresa_base_id: Optional[str] = None,
+        grupo_empresarial: Optional[str] = None,
+    ) -> Success[list[dict]] | Failure[Exception]:
+        """
+        Enrich pgvector search results with REAL prices from Tacto API.
+
+        This method takes items found via pgvector semantic search and
+        matches them with the Tacto cardápio to get ACCURATE prices.
+
+        CRITICAL: Only returns items that exist in BOTH pgvector AND Tacto.
+        This guarantees we NEVER return fake items or wrong prices.
+
+        Args:
+            restaurant_id: Restaurant ID
+            pgvector_results: Results from VectorStore.search_menu()
+                Each item has: content, metadata, similarity
+            empresa_base_id: Tacto empresa_base_id
+            grupo_empresarial: Tacto grupo_empresarial
+
+        Returns:
+            List of items with verified names and REAL prices from Tacto
+        """
+        if not pgvector_results:
+            return Ok([])
+
+        # Get full menu from Tacto (cached in Redis)
+        menu_result = await self.get_menu(
+            restaurant_id,
+            empresa_base_id=empresa_base_id,
+            grupo_empresarial=grupo_empresarial,
+        )
+        if isinstance(menu_result, Failure):
+            return menu_result
+
+        # Get raw cardápio for price extraction
+        cache_key = self._cache_key("menu", restaurant_id)
+        cached_raw = await self._get_cached(cache_key)
+        if not cached_raw:
+            logger.warning("enrich_prices_no_cache", restaurant_id=str(restaurant_id.value))
+            return Ok([])
+
+        cardapio = cached_raw.get("cardapio", cached_raw.get("itens", cached_raw.get("items", [])))
+
+        # Build lookup dict: normalized name -> full item data
+        tacto_items: dict[str, dict] = {}
+        for item_data in cardapio:
+            if not item_data.get("disponivel", item_data.get("available", True)):
+                continue
+
+            name = (
+                item_data.get("nomeCompleto")
+                or item_data.get("nome")
+                or item_data.get("name")
+                or ""
+            )
+            if name:
+                tacto_items[name.lower().strip()] = item_data
+
+        # Match pgvector results with Tacto items
+        enriched: list[dict] = []
+        for pv_item in pgvector_results:
+            metadata = pv_item.get("metadata", {})
+            pv_name = metadata.get("name", "")
+            pv_name_lower = pv_name.lower().strip()
+
+            # Try exact match first
+            tacto_item = tacto_items.get(pv_name_lower)
+
+            # Try partial match if exact fails
+            if not tacto_item:
+                for tacto_name, tacto_data in tacto_items.items():
+                    if pv_name_lower in tacto_name or tacto_name in pv_name_lower:
+                        tacto_item = tacto_data
+                        break
+
+            if not tacto_item:
+                # Item not found in Tacto — SKIP (never invent)
+                logger.debug(
+                    "pgvector_item_not_in_tacto_skipping",
+                    item_name=pv_name,
+                    restaurant_id=str(restaurant_id.value),
+                )
+                continue
+
+            # Extract REAL data from Tacto
+            real_name = (
+                tacto_item.get("nomeCompleto")
+                or tacto_item.get("nome")
+                or tacto_item.get("name")
+                or pv_name
+            )
+            category = tacto_item.get("grupo") or tacto_item.get("categoria") or "Outros"
+            description = (
+                tacto_item.get("textoInformativo")
+                or tacto_item.get("descricao")
+                or tacto_item.get("description")
+            )
+            variations = self._extract_variations(tacto_item)
+            base_price = self._extract_price(tacto_item)
+
+            enriched.append({
+                "name": real_name,
+                "category": category,
+                "description": description,
+                "price": base_price,
+                "variations": variations,
+                "is_available": True,
+                "similarity": pv_item.get("similarity", 0),
+            })
+
+        # Sort by semantic similarity
+        enriched.sort(key=lambda x: x.get("similarity", 0), reverse=True)
+
+        logger.info(
+            "pgvector_enriched_with_prices",
+            restaurant_id=str(restaurant_id.value),
+            pgvector_count=len(pgvector_results),
+            enriched_count=len(enriched),
+        )
+
+        return Ok(enriched)

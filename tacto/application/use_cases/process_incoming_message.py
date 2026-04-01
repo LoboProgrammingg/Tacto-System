@@ -203,19 +203,37 @@ class ProcessIncomingMessageUseCase:
 
         is_level2 = restaurant.automation_type.can_collect_orders
 
-        if is_level2 and self._menu_provider:
-            # Level 2: Use enhanced RAG with prices from TactoMenuProvider
+        if is_level2 and self._vector_store and self._embedding_client and self._menu_provider:
+            # Level 2: Use pgvector semantic search + REAL prices from Tacto API
+            # This guarantees we NEVER invent items or prices
             try:
-                search_result = await self._menu_provider.search_menu_with_prices(
-                    restaurant.id,
-                    dto.body,
-                    limit=_settings.gemini.level2_rag_search_limit,
-                    empresa_base_id=restaurant.empresa_base_id,
-                    grupo_empresarial=str(restaurant.chave_grupo_empresarial),
-                )
-                if isinstance(search_result, Success) and search_result.value:
-                    rag_context = self._menu_provider.build_rag_context_with_prices(search_result.value)
-                    log.debug("rag_level2_search_with_prices", hits=len(search_result.value))
+                embed_result = await self._embedding_client.generate_embedding(dto.body)
+                if isinstance(embed_result, Success):
+                    # Step 1: Semantic search via pgvector (same as Level 1)
+                    search_result = await self._vector_store.search_menu(
+                        restaurant.id.value,
+                        embed_result.value,
+                        limit=_settings.gemini.level2_rag_search_limit,
+                    )
+                    if isinstance(search_result, Success) and search_result.value:
+                        # Step 2: Enrich with REAL prices from Tacto API
+                        enriched = await self._menu_provider.enrich_pgvector_results_with_prices(
+                            restaurant.id,
+                            search_result.value,
+                            empresa_base_id=restaurant.empresa_base_id,
+                            grupo_empresarial=str(restaurant.chave_grupo_empresarial),
+                        )
+                        if isinstance(enriched, Success) and enriched.value:
+                            rag_context = self._menu_provider.build_rag_context_with_prices(enriched.value)
+                            log.debug(
+                                "rag_level2_pgvector_with_prices",
+                                pgvector_hits=len(search_result.value),
+                                enriched_hits=len(enriched.value),
+                            )
+                        else:
+                            # Fallback: use pgvector results without prices
+                            rag_context = self._build_rag_context(search_result.value)
+                            log.warning("rag_level2_price_enrichment_failed_using_pgvector_only")
             except Exception as exc:
                 log.warning("rag_level2_search_failed", error=str(exc))
 

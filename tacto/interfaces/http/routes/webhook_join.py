@@ -4,23 +4,20 @@ Decision flow:
   1. Validate HMAC signature (if configured)
   2. Ignore non "messages.upsert" events
   3. Ignore group messages (@g.us)
-  4. fromMe=true → check if AI-sent (ignore) or human operator (disable AI 12h)
-  5. Extract text — ignore media
-  6. Buffer messages (5s window) to combine rapid consecutive messages
-  7. Route to ProcessIncomingMessageUseCase
+  4. fromMe=True → check if AI-sent (ignore) or human operator (disable AI 12h)
+  5. fromMe=False + sender=instance_phone → WA Business automated msg → IGNORE
+  6. Extract text — ignore media
+  7. Buffer messages (5s window) to combine rapid consecutive messages
+  8. Route to ProcessIncomingMessageUseCase
 
-Human Operator Detection (two paths):
-  Path A — fromMe=True:
-    - remoteJid = RECIPIENT (customer's phone)
-    - Check SentMessageTracker (message_id or content hash)
-    - If found → AI echo → ignore
-    - If NOT found → human operator → disable AI 12h
-    - Also: cache sender phone → InstancePhoneCache (for Path B)
-
-  Path B — fromMe=False but sender IS the instance phone:
-    - Join API sometimes sends fromMe=False for messages from the physical device
-    - Compare sender phone against InstancePhoneCache
-    - If match → human operator → disable AI 12h
+Human Operator Detection:
+  - fromMe=True + NOT in SentMessageTracker → human operator → disable AI 12h
+  - fromMe=True + in SentMessageTracker → AI echo → ignore
+  
+WhatsApp Business Automated Messages (greeting, away msg):
+  - fromMe=False + sender=instance_phone → WA Business automated msg → IGNORE
+  - These are sent BY the WA server on behalf of the business, NOT by a human.
+  - Human operators ALWAYS produce fromMe=True regardless of device (web/mobile/desktop).
 
 Security:
   - HMAC-SHA256 signature validation via X-Hub-Signature-256 header
@@ -115,12 +112,21 @@ async def join_webhook(
             if redis_client_step3 and redis_client_step3.is_connected:
                 phone_cache = InstancePhoneCache(redis_client_step3)
                 if from_me:
-                    # Cache the instance's own phone number logic.
+                    # Cache the instance's own phone number for future detection.
                     await phone_cache.set_instance_phone(instance, clean_sender)
                 else:
-                    # Check if the message is coming from the known instance phone even if fromMe is false
+                    # from_me=False but sender matches the instance's own phone.
+                    # This is a WhatsApp Business automated message (greeting, away msg, etc.)
+                    # sent by the WA server on behalf of the business — NOT a human operator.
+                    # Human operators always produce from_me=True regardless of device.
+                    # → Ignore silently, never disable AI.
                     if await phone_cache.is_instance_phone(instance, clean_sender):
-                        is_operator_message = True
+                        log.info(
+                            "automated_business_message_ignored",
+                            sender=clean_sender,
+                            reason="from_me=False + instance_phone = WA Business automated msg",
+                        )
+                        return WebhookResponse(success=True, message="Automated business message ignored")
 
         if is_operator_message:
             source: str = data.get("source", "")
@@ -188,30 +194,17 @@ async def join_webhook(
         redis_client = getattr(request.app.state, "redis", None)
         tacto_client = getattr(request.app.state, "tacto_client", None)
 
-        if clean_sender and redis_client and redis_client.is_connected:
-            phone_cache = InstancePhoneCache(redis_client)
-            if await phone_cache.is_instance_phone(instance, clean_sender):
-                # The 'remote_jid' contains the customer's phone if the operator is talking to them.
-                customer_phone = remote_jid.split("@")[0] if "@" in remote_jid else None
-                if customer_phone:
-                    dto = IncomingMessageDTO(
-                        instance_key=instance,
-                        from_phone=customer_phone,
-                        body="__human_operator__",
-                        from_me=False,
-                        source="human_operator",
-                        timestamp=timestamp,
-                        message_id=message_id,
-                        push_name=push_name,
-                    )
-                    background_tasks.add_task(_process_message_background, dto, redis_client, tacto_client)
-                    log.info(
-                        "human_operator_detected_via_sender",
-                        sender=clean_sender,
-                        instance=instance,
-                        customer_phone=customer_phone,
-                    )
-                    return WebhookResponse(success=True, message="Operator message (sender match) — AI paused 12h")
+        # Step 5b is now DISABLED.
+        # The logic was: from_me=False + sender=instance_phone → detect operator.
+        # But this catches WhatsApp Business automated messages (greeting, away msg)
+        # which are sent BY the WA server on behalf of the business with from_me=False.
+        #
+        # The CORRECT detection is:
+        #   - from_me=True → Human operator (any device: web, mobile, desktop)
+        #   - from_me=False + sender=instance_phone → WA Business automated msg → IGNORE
+        #
+        # Human operators ALWAYS produce from_me=True regardless of device.
+        # This check is handled in Step 3 (from_me=True path).
 
         # ── Step 6: Buffer message and schedule processing ───────────────
         
