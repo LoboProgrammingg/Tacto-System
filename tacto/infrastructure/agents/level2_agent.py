@@ -249,6 +249,7 @@ class Level2Agent(BaseAgent):
                 attendant_name=context.attendant_name,
                 order_state=order_state_text,
                 rag_context_with_prices=context.rag_context or "",
+                menu_url=context.menu_url or "",
                 restaurant_address=context.tacto_address or "",
                 opening_hours=context.tacto_hours or context.opening_hours or "",
                 payment_methods="Dinheiro, Cartão, PIX",
