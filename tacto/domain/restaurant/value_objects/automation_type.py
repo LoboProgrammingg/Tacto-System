@@ -11,9 +11,10 @@ class AutomationType(IntEnum):
     """
     Level of AI automation for restaurant.
 
-    BASIC: Institutional info only (no menu details, no orders)
-    INTERMEDIATE: Full menu RAG, product recommendations
-    ADVANCED: Complete order creation and management
+    BASIC (1): Informativo - responde dúvidas, horários, endereço, menu básico
+    INTERMEDIATE (2): Coleta pedidos - monta carrinho mas NÃO finaliza,
+                      sempre faz handoff para atendente confirmar taxa e pedido
+    ADVANCED (3): Automação completa - finaliza pedido sem intervenção humana (futuro)
     """
 
     BASIC = 1
@@ -24,9 +25,9 @@ class AutomationType(IntEnum):
     def display_name(self) -> str:
         """Get human-readable name."""
         names = {
-            AutomationType.BASIC: "Básico",
-            AutomationType.INTERMEDIATE: "Intermediário",
-            AutomationType.ADVANCED: "Avançado",
+            AutomationType.BASIC: "Básico (Informativo)",
+            AutomationType.INTERMEDIATE: "Intermediário (Pedidos + Handoff)",
+            AutomationType.ADVANCED: "Avançado (Automação Completa)",
         }
         return names.get(self, "Unknown")
 
@@ -36,9 +37,19 @@ class AutomationType(IntEnum):
         return self in (AutomationType.INTERMEDIATE, AutomationType.ADVANCED)
 
     @property
-    def can_create_orders(self) -> bool:
-        """Check if this level can create orders."""
+    def can_collect_orders(self) -> bool:
+        """Check if this level can collect orders (but may need handoff)."""
+        return self in (AutomationType.INTERMEDIATE, AutomationType.ADVANCED)
+
+    @property
+    def can_finalize_orders(self) -> bool:
+        """Check if this level can finalize orders WITHOUT human intervention."""
         return self == AutomationType.ADVANCED
+
+    @property
+    def requires_handoff(self) -> bool:
+        """Check if this level requires handoff to human for order confirmation."""
+        return self == AutomationType.INTERMEDIATE
 
     @property
     def can_recommend_products(self) -> bool:
