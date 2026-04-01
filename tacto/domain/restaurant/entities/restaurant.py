@@ -13,6 +13,7 @@ from typing import Optional
 from uuid import UUID
 
 from tacto.domain.restaurant.events.restaurant_created import RestaurantCreated
+from tacto.domain.restaurant.value_objects.agent_persona import AgentPersonaConfig
 from tacto.domain.restaurant.value_objects.automation_type import AutomationType
 from tacto.domain.restaurant.value_objects.integration_type import IntegrationType
 from tacto.domain.restaurant.value_objects.opening_hours import OpeningHours
@@ -33,7 +34,7 @@ class Restaurant:
     - Name must be at least 3 characters
     - Must have valid opening hours
     - Must have valid integration configuration
-    - prompt_default cannot be empty
+    - prompt_default can be empty (means: use base SYSTEM_PROMPT only, no custom instructions)
     - menu_url must be a valid URL
     """
 
@@ -48,6 +49,7 @@ class Restaurant:
     canal_master_id: str
     empresa_base_id: str
     timezone: str = "America/Cuiaba"
+    agent_config: AgentPersonaConfig = field(default_factory=AgentPersonaConfig.empty)
     is_active: bool = True
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -66,12 +68,6 @@ class Restaurant:
                 message="Restaurant name must be at least 3 characters",
                 field="name",
                 value=self.name,
-            )
-
-        if not self.prompt_default.strip():
-            raise ValidationError(
-                message="Default prompt cannot be empty",
-                field="prompt_default",
             )
 
         if not self.menu_url.strip():
@@ -132,13 +128,13 @@ class Restaurant:
         self._touch()
 
     def update_prompt(self, new_prompt: str) -> None:
-        """Update the default AI prompt."""
-        if not new_prompt.strip():
-            raise ValidationError(
-                message="Default prompt cannot be empty",
-                field="prompt_default",
-            )
+        """Update the default AI prompt. Empty string is valid — uses base SYSTEM_PROMPT."""
         self.prompt_default = new_prompt
+        self._touch()
+
+    def update_agent_config(self, new_config: AgentPersonaConfig) -> None:
+        """Update the AI persona configuration for this restaurant."""
+        self.agent_config = new_config
         self._touch()
 
     def update_opening_hours(self, new_hours: OpeningHours) -> None:
@@ -177,6 +173,7 @@ class Restaurant:
         canal_master_id: str,
         empresa_base_id: str,
         timezone: str = "America/Cuiaba",
+        agent_config: Optional[AgentPersonaConfig] = None,
         restaurant_id: Optional[RestaurantId] = None,
     ) -> "Restaurant":
         """
@@ -196,6 +193,7 @@ class Restaurant:
             canal_master_id=canal_master_id,
             empresa_base_id=empresa_base_id,
             timezone=timezone,
+            agent_config=agent_config or AgentPersonaConfig.empty(),
         )
         instance._add_event(RestaurantCreated(
             restaurant_id=instance.id.value,

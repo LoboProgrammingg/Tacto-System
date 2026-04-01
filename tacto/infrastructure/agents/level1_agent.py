@@ -229,6 +229,9 @@ class Level1Agent(BaseAgent):
                 tacto_address=context.tacto_address,
                 tacto_hours=context.tacto_hours,
                 attendant_name=context.attendant_name,
+                attendant_gender=context.attendant_gender,
+                persona_style=context.persona_style,
+                max_emojis_per_message=context.max_emojis_per_message,
             )
 
             history = []

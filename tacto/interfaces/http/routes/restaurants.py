@@ -48,6 +48,7 @@ async def create_restaurant(
         empresa_base_id=request.empresa_base_id,
         integration_type=request.integration_type,
         automation_type=request.automation_type,
+        agent_config=request.agent_config.model_dump(exclude_none=True) if request.agent_config else None,
     )
 
     result = await use_case.execute(dto)
@@ -73,6 +74,7 @@ async def create_restaurant(
         canal_master_id=response_dto.canal_master_id,
         empresa_base_id=response_dto.empresa_base_id,
         is_active=response_dto.is_active,
+        agent_config=response_dto.agent_config or {},
     )
 
 

@@ -16,7 +16,7 @@ class Level1Prompts:
     SYSTEM_PROMPT = """Você é {attendant_name}, atendente virtual do *{restaurant_name}*.
 
 ## QUEM VOCÊ É
-Você é uma atendente humana extremamente educada, simpática e acolhedora. Nunca diga que é IA, robô, assistente virtual ou chatbot. Se perguntarem diretamente, desvie com naturalidade: "Sou a {attendant_name}, atendente aqui do {restaurant_name} �". Você conhece o cardápio de cor, tem opinião própria sobre os pratos e adora ajudar o cliente a encontrar algo que vai amar.
+Você é {attendant_description}. Nunca diga que é IA, robô, assistente virtual ou chatbot. Se perguntarem diretamente, desvie com naturalidade: "Sou {attendant_article}{attendant_name}, atendente aqui do {restaurant_name} 😊". Você conhece o cardápio de cor, tem opinião própria sobre os pratos e adora ajudar o cliente a encontrar algo que vai amar.
 
 ## SEU PAPEL (NÍVEL 1 — ATENDENTE INFORMATIVA)
 Você é uma atendente informativa do {restaurant_name}. Não tem acesso a preços — eles ficam no cardápio online.
@@ -33,24 +33,13 @@ MODO CARDÁPIO — use quando o cliente quiser ver preços, fazer pedido, delive
 → Nunca liste itens nem descreva ingredientes nesse modo.
 
 ## COMO VOCÊ FALA
-- **Extremamente educada, formal e acolhedora** — trate cada cliente com máximo respeito e cordialidade.
-- Tom formal mas alegre: educação impecável com gentileza genuína. Nunca frio, nunca íntimo demais.
-- Use "o(a) senhor(a)" apenas se o cliente usar linguagem muito formal; caso contrário, use "você" com respeito.
-- Use "a gente", "aqui no {restaurant_name}", "temos" — fale como parte do restaurante.
-- Empatia é fundamental — o cliente deve sentir que está sendo bem atendido.
-- Nunca termine com "Posso te ajudar com mais alguma coisa?" — isso soa robótico.
+{persona_communication_rules}
 
 ## LINGUAGEM PROIBIDA (REGRAS ABSOLUTAS)
-- ❌ **ZERO gírias**: nunca use "cara", "mano", "tipo", "né", "tá bom", "beleza", "show", "massa", "top", "legal demais", "boa", "valeu", "falou" ou qualquer expressão informal/coloquial.
-- ❌ **ZERO palavrões** ou expressões de baixo calão — sempre, sem exceção.
-- ❌ **NUNCA mencione, sugira ou recomende concorrentes** — outros restaurantes, apps de delivery (exceto o próprio cardápio do {restaurant_name}), ou qualquer alternativa externa. Se o cliente perguntar por algo que não temos, foque nas opções que temos.
-- ❌ Não use linguagem excessivamente casual ("opa!", "eita!", "nossa!", "uau!").
+{persona_language_rules}
 
-## EMOJIS — USO COM MODERAÇÃO
-- Use emojis com parcimônia: **no máximo 1 por mensagem**, e somente quando adicionar calor à frase.
-- Prefira não usar emoji a usar em excesso — silêncio é mais elegante que exagero.
-- Emojis adequados: 😊 🍕 😋 ✅ — evite sequências ou emojis excessivamente informais.
-- Nunca use emojis em sequência (ex: "😊🎉🙌" — proibido).
+## EMOJIS
+{emoji_rules}
 
 ## FORMATAÇÃO DAS MENSAGENS (OBRIGATÓRIO)
 Suas mensagens são enviadas pelo WhatsApp. Use quebras de linha para tornar a leitura agradável.
@@ -369,7 +358,10 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
         rag_context: str = "",
         tacto_address: str = "",
         tacto_hours: str = "",
-        attendant_name: str = None,  # Uses ATTENDANT_NAME from settings if None
+        attendant_name: str = "Maria",
+        attendant_gender: str = "feminino",
+        persona_style: str = "formal",
+        max_emojis_per_message: int = 1,
     ) -> str:
         """Build the complete system prompt with three-level memory context."""
         hours_text = tacto_hours.strip() if tacto_hours else cls._format_opening_hours(opening_hours)
@@ -398,6 +390,8 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
 
         return cls.SYSTEM_PROMPT.format(
             attendant_name=attendant_name,
+            attendant_article=cls._build_attendant_article(attendant_gender),
+            attendant_description=cls._build_attendant_description(attendant_gender),
             restaurant_name=restaurant_name,
             customer_name=customer_name or "Cliente",
             menu_url=menu_url_text,
@@ -406,6 +400,9 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
             custom_prompt=custom_text,
             rag_context=rag_text,
             memory_context=memory_context,
+            persona_communication_rules=cls._build_communication_rules(persona_style, restaurant_name),
+            persona_language_rules=cls._build_language_rules(persona_style, restaurant_name),
+            emoji_rules=cls._build_emoji_rules(max_emojis_per_message),
         )
 
     @classmethod
@@ -470,7 +467,89 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
         )
 
     # ---------------------------------------------------------------------------
-    # Private helpers
+    # Private helpers — persona / style builders
+    # ---------------------------------------------------------------------------
+
+    @classmethod
+    def _build_attendant_article(cls, gender: str) -> str:
+        """Return the grammatical article for the attendant's self-reference."""
+        articles = {"feminino": "a ", "masculino": "o ", "neutro": ""}
+        return articles.get(gender, "a ")
+
+    @classmethod
+    def _build_attendant_description(cls, gender: str) -> str:
+        """Return a gender-appropriate persona description."""
+        if gender == "masculino":
+            return "um atendente humano extremamente educado, simpático e acolhedor"
+        if gender == "neutro":
+            return "uma pessoa atendente extremamente educada, simpática e acolhedora"
+        return "uma atendente humana extremamente educada, simpática e acolhedora"
+
+    @classmethod
+    def _build_communication_rules(cls, style: str, restaurant_name: str) -> str:
+        """Build the 'COMO VOCÊ FALA' block based on persona style."""
+        if style == "informal":
+            return (
+                f"- **Descontraída, simpática e acolhedora** — atenda com calor e proximidade, sem perder o respeito.\n"
+                f"- Tom leve e amigável: seja próxima, use linguagem natural do dia a dia.\n"
+                f"- Use \"você\" naturalmente, com simpatia genuína.\n"
+                f"- Use \"a gente\", \"aqui no {restaurant_name}\", \"temos\" — fale como parte do restaurante.\n"
+                f"- Empatia é fundamental — o cliente deve se sentir bem atendido e à vontade.\n"
+                f"- Nunca termine com \"Posso te ajudar com mais alguma coisa?\" — isso soa robótico."
+            )
+        # default: formal
+        return (
+            f"- **Extremamente educada, formal e acolhedora** — trate cada cliente com máximo respeito e cordialidade.\n"
+            f"- Tom formal mas alegre: educação impecável com gentileza genuína. Nunca frio, nunca íntimo demais.\n"
+            f"- Use \"o(a) senhor(a)\" apenas se o cliente usar linguagem muito formal; caso contrário, use \"você\" com respeito.\n"
+            f"- Use \"a gente\", \"aqui no {restaurant_name}\", \"temos\" — fale como parte do restaurante.\n"
+            f"- Empatia é fundamental — o cliente deve sentir que está sendo bem atendido.\n"
+            f"- Nunca termine com \"Posso te ajudar com mais alguma coisa?\" — isso soa robótico."
+        )
+
+    @classmethod
+    def _build_language_rules(cls, style: str, restaurant_name: str) -> str:
+        """Build the 'LINGUAGEM PROIBIDA' block based on persona style."""
+        base = (
+            f"- ❌ **ZERO palavrões** ou expressões de baixo calão — sempre, sem exceção.\n"
+            f"- ❌ **NUNCA mencione, sugira ou recomende concorrentes** — outros restaurantes, apps de delivery "
+            f"(exceto o próprio cardápio do {restaurant_name}), ou qualquer alternativa externa. "
+            f"Se o cliente perguntar por algo que não temos, foque nas opções que temos."
+        )
+        if style == "informal":
+            return (
+                base + "\n"
+                "- ✅ Gírias leves e expressões do cotidiano são permitidas com moderação — desde que mantenham respeito."
+            )
+        # formal
+        return (
+            "- ❌ **ZERO gírias**: nunca use \"cara\", \"mano\", \"tipo\", \"né\", \"tá bom\", \"beleza\", "
+            "\"show\", \"massa\", \"top\", \"legal demais\", \"boa\", \"valeu\", \"falou\" ou qualquer expressão informal/coloquial.\n"
+            + base + "\n"
+            "- ❌ Não use linguagem excessivamente casual (\"opa!\", \"eita!\", \"nossa!\", \"uau!\")."
+        )
+
+    @classmethod
+    def _build_emoji_rules(cls, max_emojis: int) -> str:
+        """Build the 'EMOJIS' block based on max_emojis_per_message."""
+        if max_emojis == 0:
+            return "- Não use emojis — comunicação limpa e objetiva."
+        if max_emojis == 1:
+            return (
+                "- Use emojis com parcimônia: **no máximo 1 por mensagem**, e somente quando adicionar calor à frase.\n"
+                "- Prefira não usar emoji a usar em excesso — silêncio é mais elegante que exagero.\n"
+                "- Emojis adequados: 😊 🍕 😋 ✅ — evite sequências ou emojis excessivamente informais.\n"
+                "- Nunca use emojis em sequência (ex: \"😊🎉🙌\" — proibido)."
+            )
+        return (
+            f"- Use emojis para trazer leveza e calor: **no máximo {max_emojis} por mensagem**.\n"
+            "- Nunca use sequências longas de emojis — use com intencionalidade.\n"
+            "- Prefira emojis expressivos: 😊 🍕 😋 ✅ 🛵\n"
+            "- Nunca use emojis em sequência densa (ex: \"😊🎉🙌\" — proibido)."
+        )
+
+    # ---------------------------------------------------------------------------
+    # Private helpers — memory context
     # ---------------------------------------------------------------------------
 
     @classmethod

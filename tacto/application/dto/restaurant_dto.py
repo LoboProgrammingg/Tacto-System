@@ -15,15 +15,16 @@ class CreateRestaurantDTO:
     """DTO for creating a new restaurant."""
 
     name: str
-    prompt_default: str = ""
     menu_url: str
-    opening_hours: Optional[dict[str, Any]]
     chave_grupo_empresarial: UUID
     canal_master_id: str
     empresa_base_id: str
+    opening_hours: Optional[dict[str, Any]] = None
+    prompt_default: str = ""
     integration_type: int = 2  # JOIN
     automation_type: int = 1  # BASIC
     timezone: str = "America/Cuiaba"
+    agent_config: Optional[dict[str, Any]] = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,7 @@ class UpdateRestaurantDTO:
     automation_type: Optional[int] = None
     timezone: Optional[str] = None
     is_active: Optional[bool] = None
+    agent_config: Optional[dict[str, Any]] = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +59,7 @@ class RestaurantResponseDTO:
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    agent_config: dict[str, Any] = None
 
     @classmethod
     def from_entity(cls, entity: Any) -> "RestaurantResponseDTO":
@@ -76,4 +79,5 @@ class RestaurantResponseDTO:
             is_active=entity.is_active,
             created_at=entity.created_at,
             updated_at=entity.updated_at,
+            agent_config=entity.agent_config.to_dict(),
         )

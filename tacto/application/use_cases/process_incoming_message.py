@@ -12,6 +12,7 @@ import structlog
 from tacto.application.dto.message_dto import IncomingMessageDTO, MessageResponseDTO
 from tacto.config.settings import get_settings
 from tacto.application.ports.agent_port import BaseAgent
+from tacto.application.factories.agent_factory import AgentFactory
 from tacto.domain.ai_assistance.value_objects.agent_context import AgentContext
 from tacto.application.services.memory_orchestration_service import MemoryManager
 from tacto.application.ports.embedding_client import EmbeddingClient
@@ -23,6 +24,7 @@ from tacto.domain.messaging.entities.message import Message
 from tacto.domain.messaging.repository import ConversationRepository, MessageRepository
 from tacto.domain.messaging.value_objects.message_source import MessageSource
 from tacto.domain.restaurant.repository import RestaurantRepository
+from tacto.domain.restaurant.value_objects.automation_type import AutomationType
 from tacto.shared.application import Failure, Ok, Success
 from tacto.shared.domain.value_objects import PhoneNumber
 
@@ -52,6 +54,7 @@ class ProcessIncomingMessageUseCase:
         message_repository: MessageRepository,
         messaging_client: MessagingClient,
         ai_agent: Optional[BaseAgent] = None,
+        agent_factory: Optional[AgentFactory] = None,
         memory_manager: Optional[MemoryManager] = None,
         menu_provider: Optional[MenuProvider] = None,
         vector_store: Optional[VectorStore] = None,
@@ -62,6 +65,7 @@ class ProcessIncomingMessageUseCase:
         self._message_repo = message_repository
         self._messaging_client = messaging_client
         self._ai_agent = ai_agent
+        self._agent_factory = agent_factory
         self._memory_manager = memory_manager
         self._menu_provider = menu_provider
         self._vector_store = vector_store
@@ -157,7 +161,7 @@ class ProcessIncomingMessageUseCase:
         conversation.record_message(dto.timestamp_datetime)
         await self._conversation_repo.save(conversation)
 
-        if not conversation.is_ai_active:
+        if not conversation.can_ai_respond():
             log.info("AI is disabled for this conversation")
             return Ok(
                 MessageResponseDTO(
@@ -165,7 +169,7 @@ class ProcessIncomingMessageUseCase:
                     message_id=str(incoming_message.id.value),
                     response_sent=False,
                     ai_disabled=True,
-                    ai_disabled_reason=conversation.ai_disabled_reason,
+                    ai_disabled_reason=conversation.ai_disabled_reason or "disabled",
                 )
             )
 
@@ -185,11 +189,31 @@ class ProcessIncomingMessageUseCase:
         ]
 
         # Semantic search — embed customer message and find relevant menu items
+        # Level 2 (ADVANCED) uses enhanced RAG with prices
         rag_context = ""
         tacto_address = ""
         tacto_hours = ""
 
-        if self._vector_store and self._embedding_client:
+        is_level2 = restaurant.automation_type.can_collect_orders
+
+        if is_level2 and self._menu_provider:
+            # Level 2: Use enhanced RAG with prices from TactoMenuProvider
+            try:
+                search_result = await self._menu_provider.search_menu_with_prices(
+                    restaurant.id,
+                    dto.body,
+                    limit=_settings.gemini.level2_rag_search_limit,
+                    empresa_base_id=restaurant.empresa_base_id,
+                    grupo_empresarial=str(restaurant.chave_grupo_empresarial),
+                )
+                if isinstance(search_result, Success) and search_result.value:
+                    rag_context = self._menu_provider.build_rag_context_with_prices(search_result.value)
+                    log.debug("rag_level2_search_with_prices", hits=len(search_result.value))
+            except Exception as exc:
+                log.warning("rag_level2_search_failed", error=str(exc))
+
+        elif self._vector_store and self._embedding_client:
+            # Level 1: Use pgvector semantic search (no prices)
             try:
                 embed_result = await self._embedding_client.generate_embedding(dto.body)
                 if isinstance(embed_result, Success):
@@ -221,6 +245,7 @@ class ProcessIncomingMessageUseCase:
         is_open = True if _settings.app.bypass_hours_check else restaurant.is_open_now()
         next_opening_text = restaurant.opening_hours.get_next_opening(restaurant.timezone)
 
+        persona = restaurant.agent_config
         agent_context = AgentContext(
             restaurant_id=restaurant.id.value,
             restaurant_name=restaurant.name,
@@ -236,10 +261,31 @@ class ProcessIncomingMessageUseCase:
             rag_context=rag_context,
             tacto_address=tacto_address,
             tacto_hours=tacto_hours,
-            attendant_name=_settings.app.attendant_name,
+            attendant_name=persona.effective_attendant_name(_settings.app.attendant_name),
+            attendant_gender=persona.effective_gender(_settings.app.attendant_gender),
+            persona_style=persona.effective_persona_style(_settings.app.attendant_persona_style),
+            max_emojis_per_message=persona.effective_max_emojis(_settings.app.attendant_max_emojis),
         )
 
-        response_result = await self._ai_agent.process(
+        selected_agent = self._select_agent(restaurant.automation_type)
+        if selected_agent is None:
+            log.error("No AI agent available")
+            return Ok(
+                MessageResponseDTO(
+                    success=True,
+                    message_id=str(incoming_message.id.value),
+                    response_sent=False,
+                    error="No AI agent configured",
+                )
+            )
+
+        log.debug(
+            "Selected agent",
+            automation_type=restaurant.automation_type.name,
+            agent_level=selected_agent.level,
+        )
+
+        response_result = await selected_agent.process(
             message=dto.body,
             context=agent_context,
             conversation_history=conversation_history,
@@ -277,6 +323,16 @@ class ProcessIncomingMessageUseCase:
             conversation.disable_ai(reason="customer_requested_human_handoff", duration_hours=_disable_hours)
             await self._conversation_repo.save(conversation)
 
+        # Level 2 handoff: Customer confirmed order, need human to finalize (delivery fee + confirm)
+        if "handoff_to_human" in agent_response.triggered_actions:
+            log.info(
+                "level2_order_confirmed_handoff",
+                customer_phone=dto.clean_phone,
+                reason="order_confirmed_awaiting_human",
+            )
+            conversation.disable_ai(reason="order_confirmed_awaiting_human", duration_hours=_disable_hours)
+            await self._conversation_repo.save(conversation)
+
         if "restaurant_closed" in agent_response.triggered_actions:
             log.info("restaurant_closed_disabled_ai", customer_phone=dto.clean_phone)
             # Restaurant is closed — disable AI until buffer_minutes before next opening.
@@ -288,6 +344,25 @@ class ProcessIncomingMessageUseCase:
                 fallback_hours=_disable_hours,
             )
             await self._conversation_repo.save(conversation)
+
+        # --- RACE CONDITION MITIGATION ---
+        # Re-fetch conversation to check if a human intervened during the AI generation time.
+        refresh_result = await self._conversation_repo.find_by_restaurant_and_phone(
+            restaurant.id, phone
+        )
+        if isinstance(refresh_result, Success) and refresh_result.value:
+            refreshed_conv = refresh_result.value
+            if not refreshed_conv.can_ai_respond():
+                log.info("human_intervened_during_generation_aborting_send", customer_phone=dto.clean_phone)
+                return Ok(
+                    MessageResponseDTO(
+                        success=True,
+                        message_id=str(incoming_message.id.value),
+                        response_sent=False,
+                        ai_disabled=True,
+                        ai_disabled_reason="Human intervened during generation",
+                    )
+                )
 
         send_result = await self._messaging_client.send_message(
             instance_key=dto.instance_key,
@@ -326,6 +401,25 @@ class ProcessIncomingMessageUseCase:
                 response_text=response_text,
             )
         )
+
+    def _select_agent(self, automation_type: AutomationType) -> Optional[BaseAgent]:
+        """
+        Select the appropriate AI agent based on automation type.
+
+        Priority:
+        1. AgentFactory (supports multiple automation levels)
+        2. Fallback to single ai_agent (backward compatibility)
+
+        Args:
+            automation_type: Restaurant's automation level
+
+        Returns:
+            Selected agent or None if none available
+        """
+        if self._agent_factory and self._agent_factory.is_initialized:
+            return self._agent_factory.get_agent(automation_type)
+
+        return self._ai_agent
 
     @staticmethod
     def _build_rag_context(hits: list[dict]) -> str:

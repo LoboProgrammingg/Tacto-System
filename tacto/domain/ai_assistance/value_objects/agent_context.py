@@ -24,7 +24,10 @@ class AgentContext:
     automation_level: int = 1
     is_open: bool = True
     next_opening_text: str = ""
-    rag_context: str = ""        # semantic search results (no price)
-    tacto_address: str = ""      # address from Tacto rag-full
-    tacto_hours: str = ""        # opening hours from Tacto rag-full
-    attendant_name: str = ""  # AI attendant persona name (from ATTENDANT_NAME env)
+    rag_context: str = ""               # semantic search results (no price)
+    tacto_address: str = ""             # address from Tacto rag-full
+    tacto_hours: str = ""               # opening hours from Tacto rag-full
+    attendant_name: str = ""            # effective attendant name (restaurant override or platform default)
+    attendant_gender: str = "feminino"  # "feminino" | "masculino" | "neutro"
+    persona_style: str = "formal"       # "formal" | "informal"
+    max_emojis_per_message: int = 1     # 0–5 emojis per message

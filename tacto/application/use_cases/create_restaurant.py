@@ -10,6 +10,7 @@ from tacto.application.dto.restaurant_dto import (
 )
 from tacto.domain.restaurant.entities.restaurant import Restaurant
 from tacto.domain.restaurant.repository import RestaurantRepository
+from tacto.domain.restaurant.value_objects.agent_persona import AgentPersonaConfig
 from tacto.domain.restaurant.value_objects.automation_type import AutomationType
 from tacto.domain.restaurant.value_objects.integration_type import IntegrationType
 from tacto.domain.restaurant.value_objects.opening_hours import OpeningHours
@@ -73,6 +74,7 @@ class CreateRestaurantUseCase:
                 canal_master_id=dto.canal_master_id,
                 empresa_base_id=dto.empresa_base_id,
                 timezone=dto.timezone,
+                agent_config=AgentPersonaConfig.from_dict(dto.agent_config),
             )
 
             save_result = await self._restaurant_repository.save(restaurant)

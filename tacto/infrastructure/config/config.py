@@ -95,8 +95,11 @@ class AppSettings(BaseSettings):
     # Example: "https://app.example.com,https://admin.example.com"
     cors_origins: str = Field(default="", alias="CORS_ORIGINS")
 
-    # AI Assistant Identity
+    # AI Attendant Persona — platform-wide defaults (overridable per-restaurant via agent_config)
     attendant_name: str = Field(default="Maria", alias="ATTENDANT_NAME")
+    attendant_gender: str = Field(default="feminino", alias="ATTENDANT_GENDER")
+    attendant_persona_style: str = Field(default="formal", alias="ATTENDANT_PERSONA_STYLE")
+    attendant_max_emojis: int = Field(default=1, alias="ATTENDANT_MAX_EMOJIS")
 
     # Circuit Breaker settings
     circuit_breaker_failure_threshold: int = Field(default=5, alias="CIRCUIT_BREAKER_FAILURE_THRESHOLD")
@@ -308,10 +311,46 @@ class GeminiSettings(BaseSettings):
     level1_rag_search_limit: int = Field(default=10, alias="LEVEL1_RAG_SEARCH_LIMIT")
 
     # -------------------------------------------------------------------------
-    # Level 2 agent — (reserved for future expansion)
-    # Add LEVEL2_LLM_MODEL, LEVEL2_TEMPERATURE, LEVEL2_MAX_TOKENS,
-    # LEVEL2_RAG_SEARCH_LIMIT here when Level2Agent is implemented.
+    # Level 2 agent — order taking assistant (advanced automation)
     # -------------------------------------------------------------------------
+    level2_llm_model: str = Field(default="gemini-2.5-flash", alias="LEVEL2_LLM_MODEL")
+    level2_temperature: float = Field(default=0.3, alias="LEVEL2_TEMPERATURE")
+    level2_max_tokens: int = Field(default=4096, alias="LEVEL2_MAX_TOKENS")
+    level2_rag_search_limit: int = Field(default=30, alias="LEVEL2_RAG_SEARCH_LIMIT")
+    level2_rag_similarity_threshold: float = Field(default=0.65, alias="LEVEL2_RAG_SIMILARITY_THRESHOLD")
+
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILES,
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+
+class Level2Settings(BaseSettings):
+    """
+    Level 2 Agent specific settings.
+
+    Controls order session behavior, memory limits, and RAG configuration
+    for the order-taking agent.
+    """
+
+    # Order session
+    order_session_ttl: int = Field(default=1800, alias="ORDER_SESSION_TTL")
+    order_confirmation_timeout: int = Field(default=300, alias="ORDER_CONFIRMATION_TIMEOUT")
+
+    # Memory limits (higher than Level 1 for order context)
+    memory_short_term_limit: int = Field(default=30, alias="LEVEL2_MEMORY_SHORT_TERM_LIMIT")
+    memory_medium_term_limit: int = Field(default=10, alias="LEVEL2_MEMORY_MEDIUM_TERM_LIMIT")
+    memory_long_term_limit: int = Field(default=15, alias="LEVEL2_MEMORY_LONG_TERM_LIMIT")
+
+    # Menu cache (shorter TTL for fresher prices)
+    menu_cache_ttl: int = Field(default=300, alias="LEVEL2_MENU_CACHE_TTL")
+
+    # Delivery fee settings
+    enable_delivery_fee: bool = Field(default=False, alias="ENABLE_DELIVERY_FEE")
+    default_delivery_fee: float = Field(default=5.0, alias="DEFAULT_DELIVERY_FEE")
+    free_delivery_minimum: float = Field(default=50.0, alias="FREE_DELIVERY_MINIMUM")
 
     model_config = SettingsConfigDict(
         env_file=_ENV_FILES,
@@ -338,6 +377,7 @@ class Settings(BaseSettings):
     join: JoinAPISettings = Field(default_factory=JoinAPISettings)
     gemini: GeminiSettings = Field(default_factory=GeminiSettings)
     langsmith: LangSmithSettings = Field(default_factory=LangSmithSettings)
+    level2: Level2Settings = Field(default_factory=Level2Settings)
 
     model_config = SettingsConfigDict(
         env_file=_ENV_FILES,

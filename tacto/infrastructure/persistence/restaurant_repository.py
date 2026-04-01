@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tacto.domain.restaurant.entities.restaurant import Restaurant
 from tacto.domain.restaurant.repository import RestaurantRepository
+from tacto.domain.restaurant.value_objects.agent_persona import AgentPersonaConfig
 from tacto.domain.restaurant.value_objects.automation_type import AutomationType
 from tacto.domain.restaurant.value_objects.integration_type import IntegrationType
 from tacto.domain.restaurant.value_objects.opening_hours import OpeningHours
@@ -236,6 +237,7 @@ class PostgresRestaurantRepository(RestaurantRepository):
             canal_master_id=entity.canal_master_id,
             empresa_base_id=entity.empresa_base_id,
             timezone=entity.timezone,
+            agent_config=entity.agent_config.to_dict(),
             is_active=entity.is_active,
             deleted_at=entity.deleted_at,
         )
@@ -254,6 +256,7 @@ class PostgresRestaurantRepository(RestaurantRepository):
             canal_master_id=model.canal_master_id,
             empresa_base_id=model.empresa_base_id,
             timezone=model.timezone,
+            agent_config=AgentPersonaConfig.from_dict(model.agent_config),
             is_active=model.is_active,
             created_at=model.created_at,
             updated_at=model.updated_at,

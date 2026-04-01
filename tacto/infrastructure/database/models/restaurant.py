@@ -80,6 +80,13 @@ class RestaurantModel(Base, TimestampMixin):
         default="America/Cuiaba",
     )
 
+    agent_config: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="'{}'::jsonb",
+    )
+
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
