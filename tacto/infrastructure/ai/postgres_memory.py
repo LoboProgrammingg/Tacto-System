@@ -84,6 +84,55 @@ class PostgresMemoryAdapter(MemoryPort):
             logger.error("PostgreSQL memory store error", error=str(e))
             return Err(e)
 
+    async def upsert(
+        self,
+        restaurant_id: UUID,
+        customer_phone: str,
+        entry: MemoryEntry,
+    ) -> Success[bool] | Failure[Exception]:
+        """Insert or update a memory entry by key (no duplicates)."""
+        try:
+            stmt = (
+                select(CustomerMemoryModel)
+                .where(CustomerMemoryModel.restaurant_id == restaurant_id)
+                .where(CustomerMemoryModel.customer_phone == customer_phone)
+                .where(CustomerMemoryModel.memory_key == entry.key)
+            )
+            result = await self._session.execute(stmt)
+            existing = result.scalars().first()
+
+            if existing:
+                existing.content = entry.content
+                existing.extra_data = entry.metadata
+                existing.relevance_score = entry.relevance_score
+            else:
+                model = CustomerMemoryModel(
+                    restaurant_id=restaurant_id,
+                    customer_phone=customer_phone,
+                    memory_key=entry.key,
+                    content=entry.content,
+                    extra_data=entry.metadata,
+                    relevance_score=entry.relevance_score,
+                )
+                self._session.add(model)
+
+            await self._session.commit()
+
+            logger.debug(
+                "Long-term memory upserted",
+                restaurant_id=str(restaurant_id),
+                phone=customer_phone,
+                key=entry.key,
+                action="updated" if existing else "created",
+            )
+
+            return Ok(True)
+
+        except Exception as e:
+            await self._session.rollback()
+            logger.error("PostgreSQL memory upsert error", error=str(e))
+            return Err(e)
+
     async def retrieve(
         self,
         restaurant_id: UUID,

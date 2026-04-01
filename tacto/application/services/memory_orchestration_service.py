@@ -140,6 +140,26 @@ class MemoryOrchestrationService:
 
         return await self._long_term.store(restaurant_id, customer_phone, entry)
 
+    async def upsert_preference(
+        self,
+        restaurant_id: UUID,
+        customer_phone: str,
+        preference: str,
+        category: str = "general",
+    ) -> Success[bool] | Failure[Exception]:
+        """Insert or update a customer preference (no duplicates)."""
+        entry = MemoryEntry(
+            key=f"pref:{category}",
+            content=preference,
+            memory_type=MemoryType.LONG_TERM,
+            timestamp=datetime.utcnow(),
+            metadata={"category": category},
+        )
+
+        if hasattr(self._long_term, "upsert"):
+            return await self._long_term.upsert(restaurant_id, customer_phone, entry)
+        return await self._long_term.store(restaurant_id, customer_phone, entry)
+
     async def search_relevant(
         self,
         restaurant_id: UUID,

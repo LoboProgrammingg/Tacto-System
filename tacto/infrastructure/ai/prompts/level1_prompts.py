@@ -603,6 +603,21 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
             "nunca como se estivesse lendo uma ficha."
         )
 
+        # Só inclui instrução de adaptação se existir perfil comunicativo na memória
+        has_style_profile = "Perfil comunicativo:" in long_term
+        if has_style_profile:
+            usage_hint += (
+                "\n\n**ADAPTAÇÃO AO ESTILO DO CLIENTE:**"
+                "\nBaseado no 'Perfil comunicativo' acima, ADAPTE seu jeito de responder:"
+                "\n- Cliente informal → seja mais leve e descontraída (sem perder o respeito)"
+                "\n- Cliente formal → mantenha tom mais polido e respeitoso"
+                "\n- Cliente conciso → respostas curtas e diretas"
+                "\n- Cliente detalhado → pode elaborar mais nas respostas"
+                "\n- Cliente usa emojis → use emojis com mais frequência (respeitando o limite)"
+                "\n- Cliente raramente usa emojis → reduza o uso de emojis"
+                "\nA adaptação deve ser sutil e natural — espelhe o tom do cliente sem exagero."
+            )
+
         return "\n\n".join(parts) + usage_hint
 
     @classmethod

@@ -25,6 +25,7 @@ from tacto.domain.messaging.repository import ConversationRepository, MessageRep
 from tacto.domain.messaging.value_objects.message_source import MessageSource
 from tacto.domain.restaurant.repository import RestaurantRepository
 from tacto.domain.restaurant.value_objects.automation_type import AutomationType
+from tacto.domain.customer_memory.services.style_analyzer import CustomerStyleAnalyzer
 from tacto.shared.application import Failure, Ok, Success
 from tacto.shared.domain.value_objects import PhoneNumber
 
@@ -416,6 +417,17 @@ class ProcessIncomingMessageUseCase:
 
         await self._message_repo.save(outgoing_message)
 
+        # --- CUSTOMER STYLE ANALYSIS ---
+        # Analyze communication style on first interaction and save to long-term memory.
+        # Runs after successful send so it never blocks the response.
+        if self._memory_manager:
+            await self._analyze_and_save_customer_style(
+                restaurant_id=restaurant.id.value,
+                customer_phone=dto.clean_phone,
+                customer_message=dto.body,
+                conversation_history=conversation_history,
+            )
+
         log.info("Successfully processed message and sent response")
 
         return Ok(
@@ -426,6 +438,72 @@ class ProcessIncomingMessageUseCase:
                 response_text=response_text,
             )
         )
+
+    async def _analyze_and_save_customer_style(
+        self,
+        restaurant_id,
+        customer_phone: str,
+        customer_message: str,
+        conversation_history: list[dict],
+    ) -> None:
+        """
+        Detect customer communication style and persist to long-term memory.
+
+        Only saves once per customer (checks for existing style entry).
+        Updates the profile after every 10 messages to capture style evolution.
+        """
+        _STYLE_KEY = "style:communication"
+        _UPDATE_INTERVAL = 10
+
+        try:
+            existing = await self._memory_manager.load_context(
+                restaurant_id, customer_phone
+            )
+
+            if isinstance(existing, Success):
+                style_entries = [
+                    e for e in existing.value.long_term
+                    if e.key == f"pref:{_STYLE_KEY}"
+                ]
+
+                # Count customer messages in current history
+                user_msg_count = sum(
+                    1 for m in conversation_history if m.get("role") == "user"
+                )
+
+                if style_entries and user_msg_count % _UPDATE_INTERVAL != 0:
+                    return
+
+            # Collect all customer messages from conversation history
+            customer_messages = [
+                m["content"] for m in conversation_history
+                if m.get("role") == "user" and m.get("content")
+            ]
+            if not customer_messages:
+                customer_messages = [customer_message]
+
+            profile = CustomerStyleAnalyzer.analyze(customer_messages)
+            style_text = profile.to_memory_text()
+
+            await self._memory_manager.upsert_preference(
+                restaurant_id=restaurant_id,
+                customer_phone=customer_phone,
+                preference=style_text,
+                category=_STYLE_KEY,
+            )
+
+            logger.debug(
+                "customer_style_saved",
+                phone=customer_phone,
+                style=style_text,
+            )
+
+        except Exception as exc:
+            logger.warning(
+                "customer_style_analysis_failed",
+                error=str(exc),
+                phone=customer_phone,
+            )
 
     def _select_agent(self, automation_type: AutomationType) -> Optional[BaseAgent]:
         """
