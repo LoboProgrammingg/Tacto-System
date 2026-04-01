@@ -6,7 +6,7 @@ Follows the same patterns as level1_prompts.py for consistency.
 """
 
 import re
-from typing import Optional
+from typing import Any, Optional
 
 
 class Level2Prompts:
@@ -140,7 +140,7 @@ class Level2Prompts:
     SYSTEM_PROMPT_TEMPLATE = """Você é {attendant_name}, atendente virtual do *{restaurant_name}*.
 
 ## QUEM VOCÊ É
-Você é uma atendente humana extremamente educada, simpática e eficiente. Nunca diga que é IA, robô ou chatbot. Você está aqui para receber o pedido do cliente de forma rápida e precisa.
+Você é {attendant_description}. Nunca diga que é IA, robô, assistente virtual ou chatbot. Se perguntarem diretamente, desvie com naturalidade: "Sou {attendant_article}{attendant_name}, atendente aqui do {restaurant_name} 😊". Você conhece o cardápio de cor e está aqui para receber o pedido do cliente de forma rápida e precisa.
 
 ## SEU PAPEL (NÍVEL 2 — COLETA DE PEDIDOS COM HANDOFF)
 Você recebe pedidos completos dos clientes. Você TEM acesso aos preços e DEVE calcular o total do pedido.
@@ -150,6 +150,30 @@ Após coletar todos os dados (itens, endereço, pagamento), você SEMPRE:
 1. Mostra o resumo completo
 2. Informa que um atendente irá confirmar a **taxa de entrega**
 3. Pede para o cliente **aguardar** a confirmação final por um humano
+
+## COMO VOCÊ FALA
+{persona_communication_rules}
+
+## LINGUAGEM PROIBIDA (REGRAS ABSOLUTAS)
+{persona_language_rules}
+
+## EMOJIS
+{emoji_rules}
+
+## PRIMEIRA MENSAGEM DA CONVERSA
+Se for a primeira mensagem do cliente (memória vazia ou sem conversa anterior), você DEVE:
+1. Cumprimentar brevemente
+2. Se apresentar pelo nome
+3. **CHAMAR O CLIENTE PELO NOME** (use {customer_name} se disponível)
+4. Enviar o link do cardápio: {menu_url}
+5. Dizer que pode ajudar com o pedido
+
+**Exemplo:**
+- ✅ "Olá, {customer_name}! 😊 Bem-vindo(a) ao {restaurant_name}! Sou {attendant_article}{attendant_name}. Veja nosso cardápio: {menu_url} 📱 Ou pode fazer o pedido direto comigo!"
+
+**Mensagens subsequentes (cliente já foi saudado):**
+- Responda direto ao que foi perguntado, sem repetir apresentação.
+- **NÃO use mais o nome do cliente** — apenas na primeira interação.
 
 ## REGRA DE COMPORTAMENTO — SEJA OBJETIVA E DIRETA
 ⚠️ **NUNCA liste categorias, itens ou preços se o cliente NÃO pediu especificamente.**
@@ -258,15 +282,8 @@ Se o cliente pedir para falar com atendente/humano/pessoa:
 ## FORMAS DE PAGAMENTO ACEITAS
 {payment_methods}
 
-## MEMÓRIA DA CONVERSA
-### Curto prazo (conversa atual):
-{short_term_memory}
-
-### Médio prazo (últimas interações):
-{medium_term_memory}
-
-### Longo prazo (preferências do cliente):
-{long_term_memory}
+## CONTEXTO DO CLIENTE
+{memory_context}
 
 ## INSTRUÇÕES ADICIONAIS DO RESTAURANTE
 {custom_prompt}
@@ -407,10 +424,14 @@ Até logo! 👋"""
     def build_system_prompt(
         cls,
         restaurant_name: str,
+        menu_url: str = "",
         attendant_name: str = "Maria",
+        attendant_gender: str = "feminino",
+        persona_style: str = "formal",
+        max_emojis_per_message: int = 1,
+        customer_name: Optional[str] = None,
         order_state: str = "Carrinho vazio",
         rag_context_with_prices: str = "",
-        menu_url: str = "",
         restaurant_address: str = "",
         opening_hours: str = "",
         payment_methods: str = "Dinheiro, Cartão, PIX",
@@ -422,35 +443,41 @@ Até logo! 👋"""
         """
         Build the complete system prompt for Level 2 agent.
 
-        Args:
-            restaurant_name: Name of the restaurant
-            attendant_name: AI persona name
-            order_state: Current cart state summary
-            rag_context_with_prices: Menu items with prices
-            restaurant_address: Restaurant address
-            opening_hours: Opening hours text
-            payment_methods: Accepted payment methods
-            short_term_memory: Recent conversation
-            medium_term_memory: Recent sessions
-            long_term_memory: Customer preferences
-            custom_prompt: Restaurant-specific instructions
-
-        Returns:
-            Formatted system prompt string
+        Uses the same persona builders as Level1Prompts to ensure
+        consistent attendant identity across all agent levels.
         """
+        from tacto.infrastructure.ai.prompts.level1_prompts import Level1Prompts
+
+        menu_url_text = (
+            menu_url.strip()
+            if menu_url and menu_url.strip()
+            else "Cardápio temporariamente indisponível."
+        )
+
+        memory_context = Level1Prompts._build_memory_context(
+            customer_name=customer_name,
+            short_term=short_term_memory,
+            medium_term=medium_term_memory,
+            long_term=long_term_memory,
+        )
+
         return cls.SYSTEM_PROMPT_TEMPLATE.format(
             attendant_name=attendant_name,
+            attendant_article=Level1Prompts._build_attendant_article(attendant_gender),
+            attendant_description=Level1Prompts._build_attendant_description(attendant_gender),
             restaurant_name=restaurant_name,
+            customer_name=customer_name or "Cliente",
             order_state=order_state or "Carrinho vazio",
             rag_context_with_prices=rag_context_with_prices or "Cardápio não disponível no momento.",
-            menu_url=menu_url or "Cardápio não disponível",
+            menu_url=menu_url_text,
             restaurant_address=restaurant_address or "Não informado",
             opening_hours=opening_hours or "Consulte o estabelecimento",
             payment_methods=payment_methods or "Consulte o estabelecimento",
-            short_term_memory=short_term_memory or "Sem histórico recente",
-            medium_term_memory=medium_term_memory or "Sem resumos anteriores",
-            long_term_memory=long_term_memory or "Cliente novo - sem preferências registradas",
+            memory_context=memory_context,
             custom_prompt=custom_prompt or "",
+            persona_communication_rules=Level1Prompts._build_communication_rules(persona_style, restaurant_name),
+            persona_language_rules=Level1Prompts._build_language_rules(persona_style, restaurant_name),
+            emoji_rules=Level1Prompts._build_emoji_rules(max_emojis_per_message),
         )
 
     @classmethod

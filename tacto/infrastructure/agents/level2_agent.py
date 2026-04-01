@@ -246,10 +246,14 @@ class Level2Agent(BaseAgent):
             # Build system prompt
             system_prompt = Level2Prompts.build_system_prompt(
                 restaurant_name=context.restaurant_name,
+                menu_url=context.menu_url or "",
                 attendant_name=context.attendant_name,
+                attendant_gender=context.attendant_gender,
+                persona_style=context.persona_style,
+                max_emojis_per_message=context.max_emojis_per_message,
+                customer_name=context.customer_name,
                 order_state=order_state_text,
                 rag_context_with_prices=context.rag_context or "",
-                menu_url=context.menu_url or "",
                 restaurant_address=context.tacto_address or "",
                 opening_hours=context.tacto_hours or context.opening_hours or "",
                 payment_methods="Dinheiro, Cartão, PIX",
