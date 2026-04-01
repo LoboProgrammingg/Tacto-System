@@ -25,7 +25,7 @@ _PUBLIC_PATHS = frozenset({
     "/openapi.json",
 })
 
-_WEBHOOK_PREFIX = "/api/v1/webhooks"
+_WEBHOOK_PREFIX = "/api/v1/webhook"
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

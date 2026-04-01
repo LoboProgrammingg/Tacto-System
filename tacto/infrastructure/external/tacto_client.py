@@ -323,3 +323,151 @@ class TactoClient:
             return Ok(isinstance(result, Success))
         except Exception as e:
             return Err(e)
+
+    # ------------------------------------------------------------------ #
+    # Order Submission (Level 2 Agent)                                   #
+    # ------------------------------------------------------------------ #
+
+    async def submit_order(
+        self,
+        grupo_empresarial: str,
+        empresa_base_id: str,
+        order_payload: dict[str, Any],
+    ) -> Success[dict[str, Any]] | Failure[Exception]:
+        """
+        Submit a new order to Tacto API.
+
+        POST /v1/pedido/whatsapp
+
+        Args:
+            grupo_empresarial: Chave do grupo empresarial
+            empresa_base_id: Código da empresa dentro do grupo
+            order_payload: Order data following Tacto's schema:
+                {
+                    "cliente": {"telefone": str, "nome": str},
+                    "enderecoEntrega": {"endereco": str, ...},
+                    "formaPagamento": str,
+                    "itens": [{name, quantidade, precoUnitario, ...}],
+                    "subtotal": float,
+                    "total": float,
+                    "observacaoGeral": str,
+                    "origem": "WHATSAPP_AI"
+                }
+
+        Returns:
+            Success with order confirmation including Tacto order ID
+            Failure with exception on error
+        """
+        token_result = await self._ensure_token()
+        if isinstance(token_result, Failure):
+            return token_result
+
+        try:
+            self._ensure_client()
+
+            logger.info(
+                "Submitting order to Tacto",
+                empresa_base_id=empresa_base_id,
+                item_count=len(order_payload.get("itens", [])),
+                total=order_payload.get("total"),
+            )
+
+            response = await self._client.post(
+                "/v1/pedido/whatsapp",
+                headers=self._build_headers(
+                    token=token_result.value,
+                    grupo_empresarial=grupo_empresarial,
+                    empresa_id=empresa_base_id,
+                ),
+                json=order_payload,
+            )
+            response.raise_for_status()
+            self._circuit_breaker.record_success()
+
+            result = response.json()
+            logger.info(
+                "Order submitted successfully",
+                tacto_order_id=result.get("pedidoId") or result.get("id"),
+                status=result.get("status"),
+            )
+
+            return Ok(result)
+
+        except httpx.HTTPStatusError as e:
+            error_body = None
+            try:
+                error_body = e.response.json()
+            except Exception:
+                error_body = e.response.text[:500] if e.response.text else None
+
+            logger.error(
+                "Tacto order submission failed",
+                status=e.response.status_code,
+                empresa_base_id=empresa_base_id,
+                error=str(e),
+                error_body=error_body,
+            )
+            self._circuit_breaker.record_failure()
+            return Err(e)
+        except Exception as e:
+            logger.error(
+                "Tacto order submission error",
+                empresa_base_id=empresa_base_id,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            self._circuit_breaker.record_failure()
+            return Err(e)
+
+    async def get_order_status(
+        self,
+        grupo_empresarial: str,
+        empresa_base_id: str,
+        order_id: str,
+    ) -> Success[dict[str, Any]] | Failure[Exception]:
+        """
+        Get order status from Tacto API.
+
+        GET /v1/pedido/{order_id}/status
+
+        Args:
+            grupo_empresarial: Chave do grupo empresarial
+            empresa_base_id: Código da empresa dentro do grupo
+            order_id: Tacto order ID
+
+        Returns:
+            Success with order status data
+            Failure with exception on error
+        """
+        token_result = await self._ensure_token()
+        if isinstance(token_result, Failure):
+            return token_result
+
+        try:
+            self._ensure_client()
+
+            response = await self._client.get(
+                f"/v1/pedido/{order_id}/status",
+                headers=self._build_headers(
+                    token=token_result.value,
+                    grupo_empresarial=grupo_empresarial,
+                    empresa_id=empresa_base_id,
+                ),
+            )
+            response.raise_for_status()
+            self._circuit_breaker.record_success()
+            return Ok(response.json())
+
+        except httpx.HTTPStatusError as e:
+            logger.error(
+                "Tacto order status fetch failed",
+                status=e.response.status_code,
+                order_id=order_id,
+                error=str(e),
+            )
+            self._circuit_breaker.record_failure()
+            return Err(e)
+        except Exception as e:
+            logger.error("Tacto order status error", order_id=order_id, error=str(e))
+            self._circuit_breaker.record_failure()
+            return Err(e)

@@ -55,18 +55,17 @@ class Conversation:
     def can_ai_respond(self) -> bool:
         """
         Check if AI can respond to this conversation.
-
-        AI cannot respond if:
-        - is_ai_active is False
-        - ai_disabled_until is in the future
         """
-        if not self.is_ai_active:
-            return False
-
-        if self.ai_disabled_until and self.ai_disabled_until > datetime.now(timezone.utc):
-            return False
-
-        return True
+        if self.ai_disabled_until:
+            if self.ai_disabled_until > datetime.now(timezone.utc):
+                return False
+            
+            # If we reach here, the timeout has expired. Auto-enable AI.
+            self.is_ai_active = True
+            self.ai_disabled_until = None
+            self.ai_disabled_reason = None
+            
+        return self.is_ai_active
 
     def _add_event(self, event: DomainEvent) -> None:
         """Acumula evento para despacho após persistência."""

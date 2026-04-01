@@ -73,12 +73,12 @@ class RedisMemoryAdapter(MemoryPort):
                 "relevance_score": entry.relevance_score,
             }
 
-            result = await self._redis.list_push(key, json.dumps(entry_data))
+            result = await self._redis.rpush(key, json.dumps(entry_data))
 
             if isinstance(result, Failure):
                 return result
 
-            await self._redis.set_with_expiry(f"{key}:ttl", "1", ttl)
+            await self._redis.expire(key, ttl)
 
             return Ok(True)
 
@@ -97,7 +97,7 @@ class RedisMemoryAdapter(MemoryPort):
         try:
             key = self._make_key(restaurant_id, customer_phone, memory_type)
 
-            result = await self._redis.list_range(key, -limit, -1)
+            result = await self._redis.lrange(key, -limit, -1)
 
             if isinstance(result, Failure):
                 return result

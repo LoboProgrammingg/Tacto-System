@@ -14,6 +14,7 @@ from tacto.infrastructure.config.config import (  # noqa: F401
     GeminiSettings,
     JoinAPISettings,
     LangSmithSettings,
+    Level2Settings,
     RedisSettings,
     Settings,
     TactoAPISettings,
@@ -29,5 +30,6 @@ __all__ = [
     "JoinAPISettings",
     "GeminiSettings",
     "LangSmithSettings",
+    "Level2Settings",
     "get_settings",
 ]

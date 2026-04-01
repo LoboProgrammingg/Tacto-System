@@ -251,13 +251,15 @@ class JoinClient(MessagingClient):
                 message_id=message_id,
             )
 
-            # Track the message so we can distinguish AI vs human messages
-            # Uses TWO strategies: by message_id (if available) AND by phone number
+            # Track the message so we can distinguish AI echoes from human messages.
+            # Uses message_id when available; falls back to content hash because
+            # Join API's /mensagens/enviartexto returns no message_id.
             if self._tracker:
                 await self._tracker.track_sent_message(
                     instance_key=instance_key,
                     phone=clean_phone,
-                    message_id=message_id,  # May be None, that's OK
+                    message_id=message_id,
+                    message_text=formatted_message,
                 )
 
             return Ok(SendMessageResult(message_id=message_id, sent=True))

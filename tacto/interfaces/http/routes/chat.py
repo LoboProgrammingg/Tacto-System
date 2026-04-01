@@ -19,7 +19,11 @@ from tacto.domain.messaging.entities.message import Message
 from tacto.domain.messaging.value_objects.message_source import MessageSource
 from tacto.shared.application import Failure
 from tacto.shared.domain.value_objects import PhoneNumber, RestaurantId
-from tacto.infrastructure.agents.level1_agent import Level1Agent
+from tacto.infrastructure.agents.agent_factory import create_agent
+from tacto.infrastructure.ai.redis_memory import RedisMemoryAdapter
+from tacto.infrastructure.ai.postgres_memory import PostgresMemoryAdapter
+from tacto.infrastructure.redis.redis_client import RedisClient
+from tacto.application.services.memory_orchestration_service import MemoryOrchestrationService
 from tacto.infrastructure.database.connection import get_async_session
 from tacto.infrastructure.persistence.conversation_repository import (
     PostgresConversationRepository,
@@ -117,8 +121,14 @@ async def chat_test(request: ChatRequest) -> ChatResponse:
         conversation.record_message(datetime.now(timezone.utc).replace(tzinfo=None))
         await conversation_repo.save(conversation)
 
-        # 5. Run AI agent
-        agent = Level1Agent()
+        # 5. Run AI agent — selected dynamically by restaurant.automation_type
+        # Wire 3-level memory (short/medium → Redis, long-term → PostgreSQL)
+        redis_client = RedisClient()
+        memory_manager = MemoryOrchestrationService(
+            short_term_port=RedisMemoryAdapter(redis_client),
+            long_term_port=PostgresMemoryAdapter(session),
+        )
+        agent = create_agent(restaurant.automation_type, memory_manager=memory_manager)
         context = AgentContext(
             restaurant_id=restaurant.id.value,
             restaurant_name=restaurant.name,
