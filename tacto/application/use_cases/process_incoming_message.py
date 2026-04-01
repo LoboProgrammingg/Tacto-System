@@ -161,6 +161,8 @@ class ProcessIncomingMessageUseCase:
         conversation.record_message(dto.timestamp_datetime)
         await self._conversation_repo.save(conversation)
 
+        _was_ai_disabled = not conversation.is_ai_active
+
         if not conversation.can_ai_respond():
             log.info("AI is disabled for this conversation")
             return Ok(
@@ -172,6 +174,11 @@ class ProcessIncomingMessageUseCase:
                     ai_disabled_reason=conversation.ai_disabled_reason or "disabled",
                 )
             )
+
+        # If can_ai_respond() auto-enabled AI (expired disable period), persist it
+        if _was_ai_disabled and conversation.is_ai_active:
+            await self._conversation_repo.save(conversation)
+            log.info("AI auto-enabled after expired disable period")
 
         _settings = get_settings()
         recent_messages_result = await self._message_repo.find_recent_by_conversation(
