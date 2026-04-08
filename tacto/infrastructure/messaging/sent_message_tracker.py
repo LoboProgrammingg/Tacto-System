@@ -20,6 +20,7 @@ from tacto.infrastructure.redis.redis_client import RedisClient
 
 _PREFIX_ID   = "tacto:sent_msg_id:"
 _PREFIX_HASH = "tacto:sent_msg_hash:"
+_PREFIX_AI_ACTIVE = "tacto:ai_conv_active:"
 
 
 class SentMessageTracker:
@@ -54,6 +55,27 @@ class SentMessageTracker:
             content_hash = hashlib.md5(message_text.encode("utf-8")).hexdigest()
             redis_key = f"{_PREFIX_HASH}{instance_key}:{clean_phone}:{content_hash}"
             await self._redis.set(redis_key, "1", ttl=self._ttl_hash)
+
+    async def mark_ai_active(self, instance_key: str, phone: str, ttl_hours: int = 12) -> None:
+        """Mark that AI has been active in this conversation.
+
+        TTL matches ai_disable_hours so the window expires when a fresh conversation
+        would be expected — preventing false operator detections after long inactivity.
+        """
+        if not self._redis or not self._redis.is_connected:
+            return
+        clean_phone = phone.replace("@s.whatsapp.net", "").replace("@c.us", "")
+        key = f"{_PREFIX_AI_ACTIVE}{instance_key}:{clean_phone}"
+        await self._redis.set(key, "1", ttl=ttl_hours * 3600)
+
+    async def has_ai_been_active(self, instance_key: str, phone: str) -> bool:
+        """Return True if AI has sent at least one message in this conversation within TTL."""
+        if not self._redis or not self._redis.is_connected:
+            return False
+        clean_phone = phone.replace("@s.whatsapp.net", "").replace("@c.us", "")
+        key = f"{_PREFIX_AI_ACTIVE}{instance_key}:{clean_phone}"
+        result = await self._redis.exists(key)
+        return result.is_success() and bool(result.value)
 
     async def is_ai_sent_message(
         self,
