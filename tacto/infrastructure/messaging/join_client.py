@@ -261,7 +261,6 @@ class JoinClient(MessagingClient):
                     message_id=message_id,
                     message_text=formatted_message,
                 )
-                await self._tracker.mark_ai_active(instance_key, clean_phone)
 
             return Ok(SendMessageResult(message_id=message_id, sent=True))
 

@@ -116,47 +116,17 @@ async def join_webhook(
                     await phone_cache.set_instance_phone(instance, clean_sender)
                 else:
                     # from_me=False but sender matches the instance's own phone.
-                    # This can be either:
-                    #   A) WA Business automated message (greeting/away) — ignore
-                    #   B) Human operator sending via a WA client that produces from_me=False
-                    #      (e.g. WA Business App nativo, linked device) — disable AI
-                    #
-                    # Distinguishing heuristic: if the AI has already been active in this
-                    # conversation (within the last 12h), the restaurant would not need a
-                    # greeting/away message — so this is an operator taking over.
-                    # If AI has never responded to this customer, treat as automated message.
+                    # Per Evolution/Join API: messages from the connected account always
+                    # arrive as from_me=True. from_me=False + sender=instance_phone is an
+                    # anomaly that represents WA Business automated messages (greeting/away)
+                    # sent by the WA platform on behalf of the business — NOT a human operator.
+                    # Human operators always produce from_me=True (handled in Step 3 above).
+                    # → Ignore silently, never disable AI.
                     if await phone_cache.is_instance_phone(instance, clean_sender):
-                        from tacto.infrastructure.messaging.sent_message_tracker import SentMessageTracker
-                        customer_phone_step3 = remote_jid.split("@")[0] if "@" in remote_jid else None
-                        tracker_step3 = SentMessageTracker(redis_client_step3)
-                        if customer_phone_step3 and await tracker_step3.has_ai_been_active(instance, customer_phone_step3):
-                            # AI was active → operator is taking over via non-standard WA client
-                            dto_operator = IncomingMessageDTO(
-                                instance_key=instance,
-                                from_phone=customer_phone_step3,
-                                body="__human_operator__",
-                                from_me=True,
-                                source="human_operator",
-                                timestamp=timestamp,
-                                message_id=message_id,
-                                push_name=push_name,
-                            )
-                            redis_client_op = getattr(request.app.state, "redis", None)
-                            tacto_client_op = getattr(request.app.state, "tacto_client", None)
-                            background_tasks.add_task(_process_message_background, dto_operator, redis_client_op, tacto_client_op)
-                            log.info(
-                                "human_operator_detected",
-                                customer_phone=customer_phone_step3,
-                                sender=clean_sender,
-                                source=data.get("source", ""),
-                                detection_method="from_me_false_with_ai_history",
-                            )
-                            return WebhookResponse(success=True, message="Operator message — AI paused 12h")
-
                         log.info(
                             "automated_business_message_ignored",
                             sender=clean_sender,
-                            reason="from_me=False + instance_phone + no AI history = WA Business automated msg",
+                            reason="from_me=False + instance_phone = WA Business automated msg",
                         )
                         return WebhookResponse(success=True, message="Automated business message ignored")
 
