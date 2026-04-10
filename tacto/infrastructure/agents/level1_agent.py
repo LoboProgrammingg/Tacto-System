@@ -2,7 +2,7 @@
 Level 1 (BASIC) AI Agent.
 
 Infrastructure implementation — performs actual LLM calls via LangChain + Gemini.
-Implements the BaseAgent port defined in domain/ai_assistance/ports/agent_port.py.
+Implements the BaseAgent port defined in application/ports/agent_port.py.
 
 Features:
 - Natural conversation with customer name usage
@@ -243,9 +243,14 @@ class Level1Agent(BaseAgent):
                 elif role == "assistant":
                     history.append(AIMessage(content=content))
 
-            if Level1Prompts.should_send_menu(message):
+            is_first_message = len(conversation_history) == 0
+            if is_first_message or Level1Prompts.should_send_menu(message):
                 triggered_actions.append("menu_url_sent")
-                log.info("Menu trigger detected", message=message[:50])
+                log.info(
+                    "Menu trigger detected",
+                    message=message[:50],
+                    reason="first_message" if is_first_message else "keyword_match",
+                )
 
             config = RunnableConfig(
                 tags=["level1", f"restaurant:{context.restaurant_id}"],
