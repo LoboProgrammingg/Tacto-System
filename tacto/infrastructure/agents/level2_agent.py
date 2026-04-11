@@ -2,7 +2,7 @@
 Level 2 (ORDER) AI Agent — Coleta Pedidos com Handoff.
 
 Infrastructure implementation for order-taking conversations.
-Implements the BaseAgent port defined in domain/ai_assistance/ports/agent_port.py.
+Implements the BaseAgent port defined in application/ports/agent_port.py.
 
 Features:
 - Order taking with price calculation
@@ -316,6 +316,9 @@ class Level2Agent(BaseAgent):
                 run_name=f"Level2Agent/{context.restaurant_name}",
             )
 
+            # Detect first message — always send menu_url
+            is_first_message = len(conversation_history) == 0
+
             # Generate response
             response_text = await self._chain.ainvoke(
                 {
@@ -325,6 +328,20 @@ class Level2Agent(BaseAgent):
                 },
                 config=config,
             )
+
+            # Ensure menu_url is present when the AI references the menu.
+            # The LLM often mentions "cardápio" but fails to reproduce the full URL.
+            if context.menu_url and context.menu_url not in response_text:
+                should_append_menu = (
+                    is_first_message
+                    or _response_mentions_menu(response_text)
+                )
+                if should_append_menu:
+                    response_text = f"{response_text}\n\n📋 Cardápio: {context.menu_url}"
+                    log.debug(
+                        "menu_url_appended",
+                        reason="first_message" if is_first_message else "ai_mentioned_menu_without_url",
+                    )
 
             # Store messages in memory
             if self._memory:
@@ -370,3 +387,19 @@ class Level2Agent(BaseAgent):
         except Exception as e:
             logger.error("Level2Agent processing error", error=str(e))
             return Err(e)
+
+
+# ── Module-level helpers ─────────────────────────────────────────────────────
+
+_MENU_RESPONSE_INDICATORS = [
+    "cardápio",
+    "cardapio",
+    "nosso menu",
+    "o menu",
+]
+
+
+def _response_mentions_menu(text: str) -> bool:
+    """Return True if the AI response references the menu/cardápio without the actual URL."""
+    text_lower = text.lower()
+    return any(indicator in text_lower for indicator in _MENU_RESPONSE_INDICATORS)

@@ -279,6 +279,19 @@ class Level1Agent(BaseAgent):
                 )
                 response_text = f"{response_text}\n\n{menu_block}"
 
+            # Safety net: AI spontaneously mentions cardápio but did not include the URL.
+            # This catches cases where the customer did NOT trigger menu keywords but the
+            # AI decided to reference the menu on its own (common in greetings and suggestions).
+            elif context.menu_url and context.menu_url not in response_text:
+                if _response_mentions_menu(response_text):
+                    menu_block = Level1Prompts.format_menu_url_block(
+                        url=context.menu_url,
+                        restaurant_name=context.restaurant_name,
+                        message=message,
+                    )
+                    response_text = f"{response_text}\n\n{menu_block}"
+                    log.debug("menu_url_safety_net_appended", reason="ai_mentioned_menu_without_url")
+
             if self._memory:
                 await self._memory.add_message(
                     context.restaurant_id,
@@ -320,3 +333,19 @@ class Level1Agent(BaseAgent):
         except Exception as e:
             logger.error("Level1Agent processing error", error=str(e))
             return Err(e)
+
+
+# ── Module-level helpers ─────────────────────────────────────────────────────
+
+_MENU_RESPONSE_INDICATORS = [
+    "cardápio",
+    "cardapio",
+    "nosso menu",
+    "o menu",
+]
+
+
+def _response_mentions_menu(text: str) -> bool:
+    """Return True if the AI response references the menu/cardápio without the actual URL."""
+    text_lower = text.lower()
+    return any(indicator in text_lower for indicator in _MENU_RESPONSE_INDICATORS)

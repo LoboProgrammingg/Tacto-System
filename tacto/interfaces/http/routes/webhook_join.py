@@ -149,6 +149,17 @@ async def join_webhook(
 
             # NOT an AI echo → human operator sent this manually (fromMe=True path)
             if customer_phone:
+                redis_client = getattr(request.app.state, "redis", None)
+                tacto_client = getattr(request.app.state, "tacto_client", None)
+
+                # Flush any pending message buffer for this customer so the sleeping
+                # buffer coroutine finds an empty list and exits without calling the LLM.
+                # This prevents the race condition where the AI responds AFTER the operator.
+                if redis_client and redis_client.is_connected:
+                    buffer_key = f"tacto:msg_buffer:{instance}:{customer_phone}"
+                    await redis_client.delete(buffer_key)
+                    log.debug("buffer_flushed_for_operator", customer_phone=customer_phone)
+
                 dto = IncomingMessageDTO(
                     instance_key=instance,
                     from_phone=customer_phone,
@@ -159,8 +170,6 @@ async def join_webhook(
                     message_id=message_id,
                     push_name=push_name,
                 )
-                redis_client = getattr(request.app.state, "redis", None)
-                tacto_client = getattr(request.app.state, "tacto_client", None)
                 background_tasks.add_task(_process_message_background, dto, redis_client, tacto_client)
                 log.info(
                     "human_operator_detected",
