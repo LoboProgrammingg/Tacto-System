@@ -271,26 +271,38 @@ class Level1Agent(BaseAgent):
                 config=config,
             )
 
-            if "menu_url_sent" in triggered_actions and context.menu_url not in response_text:
+            # ALWAYS append menu_url when:
+            #   1) keyword/first-message trigger fired, OR
+            #   2) AI response mentions cardápio/menu
+            # and the URL is not already present in the response text.
+            should_append = False
+            reason = ""
+
+            if context.menu_url and context.menu_url not in response_text:
+                if "menu_url_sent" in triggered_actions:
+                    should_append = True
+                    reason = "keyword_or_first_message"
+                elif _response_mentions_menu(response_text):
+                    should_append = True
+                    reason = "ai_mentioned_menu"
+                else:
+                    log.debug(
+                        "menu_url_not_appended",
+                        has_menu_url=bool(context.menu_url),
+                        triggered_actions=triggered_actions,
+                        response_preview=response_text[:120],
+                    )
+            elif context.menu_url and context.menu_url in response_text:
+                log.debug("menu_url_already_in_response")
+
+            if should_append:
                 menu_block = Level1Prompts.format_menu_url_block(
                     url=context.menu_url,
                     restaurant_name=context.restaurant_name,
                     message=message,
                 )
                 response_text = f"{response_text}\n\n{menu_block}"
-
-            # Safety net: AI spontaneously mentions cardápio but did not include the URL.
-            # This catches cases where the customer did NOT trigger menu keywords but the
-            # AI decided to reference the menu on its own (common in greetings and suggestions).
-            elif context.menu_url and context.menu_url not in response_text:
-                if _response_mentions_menu(response_text):
-                    menu_block = Level1Prompts.format_menu_url_block(
-                        url=context.menu_url,
-                        restaurant_name=context.restaurant_name,
-                        message=message,
-                    )
-                    response_text = f"{response_text}\n\n{menu_block}"
-                    log.debug("menu_url_safety_net_appended", reason="ai_mentioned_menu_without_url")
+                log.info("menu_url_appended", reason=reason, menu_url=context.menu_url)
 
             if self._memory:
                 await self._memory.add_message(

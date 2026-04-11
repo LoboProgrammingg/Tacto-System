@@ -258,6 +258,17 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
         "pedir entrega",
         "pedido para entrega",
         "quero delivery",
+        # Pedidos com "pedir" / "gostaria"
+        "pedir",
+        "gostaria de pedir",
+        "gostaria de fazer",
+        "gostaria de ver",
+        "gostaria",
+        "queria pedir",
+        "queria ver",
+        "queria fazer",
+        "posso pedir",
+        "posso fazer",
         # Retirada
         "retirada",
         "retirar",
