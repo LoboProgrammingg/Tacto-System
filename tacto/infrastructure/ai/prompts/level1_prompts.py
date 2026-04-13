@@ -165,13 +165,10 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
 
 ## REGRAS ABSOLUTAS
 1. **JAMAIS** mencione preço, valor ou qualquer dado financeiro — os itens abaixo já vêm sem preço.
-2. Use SOMENTE o link exato da seção "CARDÁPIO" abaixo. Nunca invente, encurte ou troque.
-3. Quando for enviar o link, seja breve — o link é incluído automaticamente. Não repita nem invente.
+2. **NUNCA escreva links ou URLs na sua resposta** — o sistema adiciona o link do cardápio automaticamente abaixo da sua mensagem.
+3. **NUNCA copie, mencione ou reproduza qualquer URL** que apareça neste prompt.
 4. Informe endereço e horário apenas quando perguntado.
-5. Sempre envie o link do cardápio quando o cliente pedir para ver os itens ou fazer um pedido. NUNCA DEIXE O CLIENTE SEM O {menu_url}
-
-## CARDÁPIO (link para preços e pedido)
-{menu_url}
+5. Quando o cliente pedir para ver itens ou fazer pedido, responda de forma acolhedora — o link do cardápio será anexado automaticamente.
 
 ## ITENS RELEVANTES PARA ESTA CONVERSA
 {rag_context}
@@ -428,7 +425,6 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
             attendant_description=cls._build_attendant_description(attendant_gender),
             restaurant_name=restaurant_name,
             customer_name=customer_name or "Cliente",
-            menu_url=menu_url_text,
             opening_hours=hours_text,
             restaurant_address=address_text,
             custom_prompt=custom_text,
