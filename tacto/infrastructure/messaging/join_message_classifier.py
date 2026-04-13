@@ -73,11 +73,36 @@ class JoinMessageClassifier:
         # Extrai sender de múltiplos campos (sender pode vir vazio)
         sender = _extract_sender(body, data, key)
 
-        # ── from_me=False: é mensagem de cliente ou mensagem automática do WA ──
+        # ── from_me=False: é mensagem de cliente, operador ou msg automática ──
         if not from_me:
-            is_system = await self._is_system_message(instance, sender, remote_jid)
-            if is_system:
+            is_from_instance = sender and await self._phone_cache.is_instance_phone(
+                instance, sender
+            )
+
+            if is_from_instance:
+                if remote_jid:
+                    # Telefone da instância enviou para um cliente específico
+                    # → operador humano (Join reportou from_me=False)
+                    logger.info(
+                        "classified_human_operator_from_me_false",
+                        instance=instance,
+                        sender=sender,
+                        customer_phone=_extract_customer_phone(remote_jid, key, data),
+                    )
+                    return "human_operator"
+                else:
+                    # Telefone da instância sem destinatário → broadcast/status
+                    return "system"
+
+            # Sem remote_jid e sender não é da instância → status update
+            if not remote_jid:
+                logger.debug(
+                    "no_remote_jid_treating_as_system",
+                    instance=instance,
+                    sender=sender,
+                )
                 return "system"
+
             return "user"
 
         # ── from_me=True: pode ser echo da IA ou operador humano ──
@@ -113,31 +138,6 @@ class JoinMessageClassifier:
         )
         return "human_operator"
 
-    async def _is_system_message(
-        self,
-        instance: str,
-        sender: str,
-        remote_jid: str,
-    ) -> bool:
-        """
-        Detecta mensagens automáticas do WA Business.
-        from_me=False mas sender = telefone da instância → é mensagem automática.
-        Funciona mesmo se sender vier vazio (usa remote_jid como fallback).
-        """
-        if not sender:
-            return False
-
-        is_instance = await self._phone_cache.is_instance_phone(instance, sender)
-        if is_instance:
-            return True
-
-        # Se remote_jid também está vazio (sem destinatário), provavelmente é status update
-        if not remote_jid:
-            # Sem remote_jid não sabemos para quem é — ignorar como sistema
-            logger.debug("no_remote_jid_treating_as_system", instance=instance, sender=sender)
-            return True
-
-        return False
 
 
 # ── Helpers de módulo ──────────────────────────────────────────────────────────
