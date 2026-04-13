@@ -7,10 +7,10 @@ robusto com 4 categorias de saída e fallback em múltiplas camadas.
 Categorias:
   - "user"           → mensagem real do cliente → processar normalmente
   - "ai_echo"        → echo da mensagem que a IA enviou → ignorar
-  - "human_operator" → operador humano assumiu → desativar IA 12h
-  - "system"         → mensagem automática WA Business → ignorar
+  - "human_operator" → operador humano ou WA Business assumiu → desativar IA 12h
+  - "ignored"        → sem remote_jid, impossível identificar cliente → ignorar
 
-Fail-safe: qualquer from_me=True não identificado como AI = "human_operator".
+Fail-safe: qualquer mensagem do lado do negócio não identificada como AI = "human_operator".
 Nunca mais ignorar operador humano acidentalmente.
 """
 
@@ -24,7 +24,7 @@ from tacto.infrastructure.messaging.sent_message_tracker import SentMessageTrack
 
 logger = structlog.get_logger()
 
-MessageOrigin = str  # "user" | "ai_echo" | "human_operator" | "system"
+MessageOrigin = str  # "user" | "ai_echo" | "human_operator" | "ignored"
 
 
 class JoinMessageClassifier:
@@ -37,7 +37,7 @@ class JoinMessageClassifier:
 
         if origin == "ai_echo":        return ignore
         if origin == "human_operator": return disable_ai
-        if origin == "system":         return ignore
+        if origin == "ignored":        return ignore (no remote_jid)
         if origin == "user":           return process
     """
 
@@ -62,7 +62,7 @@ class JoinMessageClassifier:
             key: data["key"]
 
         Returns:
-            "user" | "ai_echo" | "human_operator" | "system"
+            "user" | "ai_echo" | "human_operator" | "ignored"
         """
         from_me: bool = key.get("fromMe", False)
         message_id: str = key.get("id", "")
@@ -73,35 +73,29 @@ class JoinMessageClassifier:
         # Extrai sender de múltiplos campos (sender pode vir vazio)
         sender = _extract_sender(body, data, key)
 
-        # ── from_me=False: é mensagem de cliente, operador ou msg automática ──
+        # ── from_me=False ──────────────────────────────────────────────────
         if not from_me:
-            is_from_instance = sender and await self._phone_cache.is_instance_phone(
-                instance, sender
-            )
-
-            if is_from_instance:
-                if remote_jid:
-                    # Telefone da instância enviou para um cliente específico
-                    # → operador humano (Join reportou from_me=False)
-                    logger.info(
-                        "classified_human_operator_from_me_false",
-                        instance=instance,
-                        sender=sender,
-                        customer_phone=_extract_customer_phone(remote_jid, key, data),
-                    )
-                    return "human_operator"
-                else:
-                    # Telefone da instância sem destinatário → broadcast/status
-                    return "system"
-
-            # Sem remote_jid e sender não é da instância → status update
+            # Sem remote_jid → não sabemos o cliente → ignorar
             if not remote_jid:
                 logger.debug(
-                    "no_remote_jid_treating_as_system",
+                    "ignored_no_remote_jid",
                     instance=instance,
                     sender=sender,
                 )
-                return "system"
+                return "ignored"
+
+            # Sender é o telefone da instância → operador/WA Business
+            is_from_instance = sender and await self._phone_cache.is_instance_phone(
+                instance, sender
+            )
+            if is_from_instance:
+                logger.info(
+                    "classified_human_operator_from_me_false",
+                    instance=instance,
+                    sender=sender,
+                    customer_phone=_extract_customer_phone(remote_jid, key, data),
+                )
+                return "human_operator"
 
             return "user"
 

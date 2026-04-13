@@ -7,7 +7,7 @@ Decision flow:
   4. Classify message origin via JoinMessageClassifier:
      - "ai_echo"        → ignore (echo of AI-sent message)
      - "human_operator" → disable AI 12h
-     - "system"         → ignore (WA Business automated msg)
+     - "ignored"        → ignore (no remote_jid, can't identify customer)
      - "user"           → process normally
   5. Extract text — ignore media
   6. Buffer messages (5s window) to combine rapid consecutive messages
@@ -119,9 +119,9 @@ async def join_webhook(
             log.debug("ai_echo_ignored", message_id=message_id)
             return WebhookResponse(success=True, message="AI echo ignored")
 
-        if origin == "system":
-            log.info("system_message_ignored", sender=body.get("sender", ""))
-            return WebhookResponse(success=True, message="System message ignored")
+        if origin == "ignored":
+            log.debug("message_ignored_no_remote_jid", sender=body.get("sender", ""))
+            return WebhookResponse(success=True, message="Message ignored")
 
         if origin == "human_operator":
             customer_phone = _extract_sender_number(key, data)
