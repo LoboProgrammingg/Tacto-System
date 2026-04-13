@@ -106,9 +106,26 @@ class MessageBufferService:
             )
             return
 
-        lock_result = await self._redis.set(lock_key, "1", ttl=self._lock_ttl, nx=True)
-        if not lock_result.is_success() or not lock_result.value:
-            logger.debug("buffer_skip", phone=phone, reason="lock_not_acquired")
+        lock_acquired = False
+        for attempt in range(3):
+            lock_result = await self._redis.set(lock_key, "1", ttl=self._lock_ttl, nx=True)
+            if lock_result.is_success() and lock_result.value:
+                lock_acquired = True
+                break
+            backoff = (attempt + 1) * 2
+            logger.debug(
+                "buffer_lock_retry",
+                phone=phone,
+                attempt=attempt + 1,
+                backoff_seconds=backoff,
+            )
+            await asyncio.sleep(backoff)
+
+        if not lock_acquired:
+            logger.warning("buffer_lock_failed_processing_immediately", phone=phone)
+            await self._process_immediately(
+                instance_key, phone, text, timestamp, message_id, push_name, process_callback
+            )
             return
 
         messages = buffer_result.value if buffer_result.is_success() else []

@@ -69,10 +69,10 @@ async def create_and_execute_process_message(
         redis_client=redis_client,
     )
 
-    messaging_client = JoinClient(message_tracker=SentMessageTracker(redis_client))
     embedding_client = GeminiClient()
 
     async with get_async_session() as session:
+        messaging_client = JoinClient(message_tracker=SentMessageTracker(redis_client, session))
         from tacto.infrastructure.ai.redis_memory import RedisMemoryAdapter
         from tacto.infrastructure.ai.postgres_memory import PostgresMemoryAdapter
         from tacto.application.services.memory_orchestration_service import MemoryOrchestrationService

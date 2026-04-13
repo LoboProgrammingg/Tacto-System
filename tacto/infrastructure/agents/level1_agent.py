@@ -243,13 +243,12 @@ class Level1Agent(BaseAgent):
                 elif role == "assistant":
                     history.append(AIMessage(content=content))
 
-            is_first_message = len(conversation_history) == 0
-            if is_first_message or Level1Prompts.should_send_menu(message):
+            if Level1Prompts.should_send_menu(message):
                 triggered_actions.append("menu_url_sent")
                 log.info(
                     "Menu trigger detected",
                     message=message[:50],
-                    reason="first_message" if is_first_message else "keyword_match",
+                    reason="keyword_match",
                 )
 
             config = RunnableConfig(
@@ -272,7 +271,7 @@ class Level1Agent(BaseAgent):
             )
 
             # ALWAYS append menu_url when:
-            #   1) keyword/first-message trigger fired, OR
+            #   1) keyword trigger fired (should_send_menu), OR
             #   2) AI response mentions cardápio/menu
             # and the URL is not already present in the response text.
             should_append = False
@@ -281,7 +280,7 @@ class Level1Agent(BaseAgent):
             if context.menu_url and context.menu_url not in response_text:
                 if "menu_url_sent" in triggered_actions:
                     should_append = True
-                    reason = "keyword_or_first_message"
+                    reason = "keyword_match"
                 elif _response_mentions_menu(response_text):
                     should_append = True
                     reason = "ai_mentioned_menu"

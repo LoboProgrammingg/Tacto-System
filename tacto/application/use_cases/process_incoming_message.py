@@ -129,15 +129,30 @@ class ProcessIncomingMessageUseCase:
             )
             save_result = await self._conversation_repo.save(conversation)
             if isinstance(save_result, Failure):
-                return save_result
-            log.info("Created new conversation")
+                # Race condition: another task created the conversation concurrently
+                # (UniqueViolationError on uq_conversations_restaurant_phone).
+                # Retry by fetching the existing record.
+                retry_result = await self._conversation_repo.find_by_restaurant_and_phone(
+                    restaurant.id, phone
+                )
+                if isinstance(retry_result, Success) and retry_result.value:
+                    conversation = retry_result.value
+                    log.info("conversation_creation_race_resolved", phone=dto.clean_phone)
+                else:
+                    log.error("conversation_creation_failed_after_retry", error=str(save_result.error))
+                    return save_result
+            else:
+                log.info("Created new conversation")
 
         source = MessageSource(dto.source)
 
         if source.is_human_intervention:
-            conversation.handle_human_intervention()
-            await self._conversation_repo.save(conversation)
-            log.info("AI disabled due to human intervention", source=dto.source)
+            if conversation.is_ai_active:
+                conversation.handle_human_intervention()
+                await self._conversation_repo.save(conversation)
+                log.info("AI disabled due to human intervention", source=dto.source)
+            else:
+                log.debug("ai_already_disabled_skipping_duplicate_operator", phone=dto.clean_phone)
             return Ok(
                 MessageResponseDTO(
                     success=True,

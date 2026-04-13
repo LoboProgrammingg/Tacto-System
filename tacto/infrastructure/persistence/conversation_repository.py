@@ -53,6 +53,7 @@ class PostgresConversationRepository(ConversationRepository):
             return Ok(conversation)
 
         except Exception as e:
+            await self._session.rollback()
             return Err(e)
 
     async def find_by_id(

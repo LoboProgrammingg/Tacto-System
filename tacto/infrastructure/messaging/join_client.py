@@ -12,6 +12,7 @@ Retry policy (Phase 5 — Reliability):
 """
 
 import asyncio
+import hashlib
 import random
 import re
 from typing import Optional
@@ -230,18 +231,22 @@ class JoinClient(MessagingClient):
                         headers=headers,
                     )
 
+            # Track BEFORE sending to prevent race condition where webhook
+            # echo arrives before Redis/DB save completes.
+            content_hash = hashlib.md5(formatted_message.strip().encode("utf-8")).hexdigest()
+            if self._tracker:
+                await self._tracker.track_sent_message(
+                    instance_key=instance_key,
+                    phone=clean_phone,
+                    message_id=None,  # Not yet available — will update after send
+                    message_text=formatted_message,
+                )
+
             response = await self._with_retry(_do_request, "send_message")
             response.raise_for_status()
 
             data = response.json()
-            
-            # Log full response to understand the format
-            logger.info(
-                "join_api_response_debug",
-                response_data=data,
-                response_keys=list(data.keys()) if isinstance(data, dict) else type(data).__name__,
-            )
-            
+
             message_id = self._extract_message_id(data)
 
             logger.info(
@@ -251,15 +256,13 @@ class JoinClient(MessagingClient):
                 message_id=message_id,
             )
 
-            # Track the message so we can distinguish AI echoes from human messages.
-            # Uses message_id when available; falls back to content hash because
-            # Join API's /mensagens/enviartexto returns no message_id.
-            if self._tracker:
-                await self._tracker.track_sent_message(
+            # Update with real message_id now that we have it
+            if self._tracker and message_id:
+                await self._tracker.update_message_id(
                     instance_key=instance_key,
                     phone=clean_phone,
-                    message_id=message_id,
-                    message_text=formatted_message,
+                    old_temp_hash=content_hash,
+                    real_message_id=message_id,
                 )
 
             return Ok(SendMessageResult(message_id=message_id, sent=True))

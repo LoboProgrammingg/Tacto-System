@@ -4,20 +4,17 @@ Decision flow:
   1. Validate HMAC signature (if configured)
   2. Ignore non "messages.upsert" events
   3. Ignore group messages (@g.us)
-  4. fromMe=True → check if AI-sent (ignore) or human operator (disable AI 12h)
-  5. fromMe=False + sender=instance_phone → WA Business automated msg → IGNORE
-  6. Extract text — ignore media
-  7. Buffer messages (5s window) to combine rapid consecutive messages
-  8. Route to ProcessIncomingMessageUseCase
+  4. Classify message origin via JoinMessageClassifier:
+     - "ai_echo"        → ignore (echo of AI-sent message)
+     - "human_operator" → disable AI 12h
+     - "system"         → ignore (WA Business automated msg)
+     - "user"           → process normally
+  5. Extract text — ignore media
+  6. Buffer messages (5s window) to combine rapid consecutive messages
+  7. Route to ProcessIncomingMessageUseCase
 
-Human Operator Detection:
-  - fromMe=True + NOT in SentMessageTracker → human operator → disable AI 12h
-  - fromMe=True + in SentMessageTracker → AI echo → ignore
-  
-WhatsApp Business Automated Messages (greeting, away msg):
-  - fromMe=False + sender=instance_phone → WA Business automated msg → IGNORE
-  - These are sent BY the WA server on behalf of the business, NOT by a human.
-  - Human operators ALWAYS produce fromMe=True regardless of device (web/mobile/desktop).
+Classification uses 5-layer detection (Redis ID → Redis hash → DB ID → DB hash → time window).
+Fail-safe: any from_me=True not confirmed as AI = human_operator.
 
 Security:
   - HMAC-SHA256 signature validation via X-Hub-Signature-256 header
@@ -31,7 +28,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 
 from tacto.application.dto.message_dto import IncomingMessageDTO
 from tacto.application.services.message_buffer_service import MessageBufferService
-from tacto.infrastructure.messaging.instance_phone_cache import InstancePhoneCache
+from tacto.infrastructure.database.connection import get_async_session
+from tacto.infrastructure.messaging.join_message_classifier import JoinMessageClassifier
 from tacto.interfaces.http.middlewares.webhook_security import validate_webhook_signature
 from tacto.interfaces.http.schemas.webhook import WebhookResponse
 
@@ -101,60 +99,35 @@ async def join_webhook(
             participant=data.get("participant", "") or key.get("participant", ""),
         )
 
-        # ── Step 3: fromMe=true OR sender is instance → check if AI-sent or human operator ─────────
-        sender: str = body.get("sender", "")
-        clean_sender: str = sender.split("@")[0] if "@" in sender else sender
+        # ── Step 3: Classify message origin via JoinMessageClassifier ────────
+        redis_client = getattr(request.app.state, "redis", None)
+        tacto_client = getattr(request.app.state, "tacto_client", None)
 
-        is_operator_message = from_me
+        db_session = None
+        try:
+            async with get_async_session() as session:
+                db_session = session
+                classifier = JoinMessageClassifier(redis_client, db_session)
+                origin = await classifier.classify(body, data, key)
+        except Exception as cls_exc:
+            log.warning("classifier_db_error_falling_back", error=str(cls_exc))
+            # Fallback: classify without DB (Redis-only)
+            classifier = JoinMessageClassifier(redis_client, None)
+            origin = await classifier.classify(body, data, key)
 
-        if clean_sender:
-            redis_client_step3 = getattr(request.app.state, "redis", None)
-            if redis_client_step3 and redis_client_step3.is_connected:
-                phone_cache = InstancePhoneCache(redis_client_step3)
-                if from_me:
-                    # Cache the instance's own phone number for future detection.
-                    await phone_cache.set_instance_phone(instance, clean_sender)
-                else:
-                    # from_me=False but sender matches the instance's own phone.
-                    # Per Evolution/Join API: messages from the connected account always
-                    # arrive as from_me=True. from_me=False + sender=instance_phone is an
-                    # anomaly that represents WA Business automated messages (greeting/away)
-                    # sent by the WA platform on behalf of the business — NOT a human operator.
-                    # Human operators always produce from_me=True (handled in Step 3 above).
-                    # → Ignore silently, never disable AI.
-                    if await phone_cache.is_instance_phone(instance, clean_sender):
-                        log.info(
-                            "automated_business_message_ignored",
-                            sender=clean_sender,
-                            reason="from_me=False + instance_phone = WA Business automated msg",
-                        )
-                        return WebhookResponse(success=True, message="Automated business message ignored")
+        if origin == "ai_echo":
+            log.debug("ai_echo_ignored", message_id=message_id)
+            return WebhookResponse(success=True, message="AI echo ignored")
 
-        if is_operator_message:
-            source: str = data.get("source", "")
+        if origin == "system":
+            log.info("system_message_ignored", sender=body.get("sender", ""))
+            return WebhookResponse(success=True, message="System message ignored")
 
-            # Extract echo text to compare with AI-sent content hash
-            echo_message: dict[str, Any] = data.get("message", {})
-            echo_message_type: str = data.get("messageType", "")
-            echo_text: str | None = _extract_text(echo_message, echo_message_type) or None
-
-            customer_phone = remote_jid.split("@")[0] if "@" in remote_jid else None
-            is_ai_message = await _check_if_ai_sent_message(
-                request, instance, message_id, customer_phone, echo_text
-            )
-
-            if is_ai_message:
-                log.debug("ai_echo_ignored", message_id=message_id, source=source)
-                return WebhookResponse(success=True, message="AI echo ignored")
-
-            # NOT an AI echo → human operator sent this manually (fromMe=True path)
+        if origin == "human_operator":
+            customer_phone = _extract_sender_number(key, data)
             if customer_phone:
-                redis_client = getattr(request.app.state, "redis", None)
-                tacto_client = getattr(request.app.state, "tacto_client", None)
-
                 # Flush any pending message buffer for this customer so the sleeping
                 # buffer coroutine finds an empty list and exits without calling the LLM.
-                # This prevents the race condition where the AI responds AFTER the operator.
                 if redis_client and redis_client.is_connected:
                     buffer_key = f"tacto:msg_buffer:{instance}:{customer_phone}"
                     await redis_client.delete(buffer_key)
@@ -171,12 +144,7 @@ async def join_webhook(
                     push_name=push_name,
                 )
                 background_tasks.add_task(_process_message_background, dto, redis_client, tacto_client)
-                log.info(
-                    "human_operator_detected",
-                    customer_phone=customer_phone,
-                    sender=clean_sender,
-                    source=source,
-                )
+                log.info("human_operator_detected", customer_phone=customer_phone)
             return WebhookResponse(success=True, message="Operator message — AI paused 12h")
 
         # ── Step 4: Extract text content ──────────────────────────────────
@@ -197,25 +165,6 @@ async def join_webhook(
         if not phone:
             log.warning("webhook_sender_extraction_failed", remote_jid=remote_jid)
             return WebhookResponse(success=True, message="Cannot extract phone")
-
-        # ── Step 5b: Detect operator via phone cache (fromMe=False edge case) ─
-        # Join API sometimes sends fromMe=False for messages sent from the physical
-        # device (not via API). We compare the sender's phone against the cached
-        # instance phone to catch this case.
-        redis_client = getattr(request.app.state, "redis", None)
-        tacto_client = getattr(request.app.state, "tacto_client", None)
-
-        # Step 5b is now DISABLED.
-        # The logic was: from_me=False + sender=instance_phone → detect operator.
-        # But this catches WhatsApp Business automated messages (greeting, away msg)
-        # which are sent BY the WA server on behalf of the business with from_me=False.
-        #
-        # The CORRECT detection is:
-        #   - from_me=True → Human operator (any device: web, mobile, desktop)
-        #   - from_me=False + sender=instance_phone → WA Business automated msg → IGNORE
-        #
-        # Human operators ALWAYS produce from_me=True regardless of device.
-        # This check is handled in Step 3 (from_me=True path).
 
         # ── Step 6: Buffer message and schedule processing ───────────────
         
@@ -277,24 +226,6 @@ async def _process_message_background(dto: IncomingMessageDTO, redis_client=None
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
-
-async def _check_if_ai_sent_message(
-    request: Request,
-    instance_key: str,
-    message_id: str,
-    phone: str | None = None,
-    echo_text: str | None = None,
-) -> bool:
-    """Check if from_me=True message was sent by AI (not by a human operator)."""
-    from tacto.infrastructure.messaging.sent_message_tracker import SentMessageTracker
-
-    redis_client = getattr(request.app.state, "redis", None)
-    if not redis_client or not redis_client.is_connected:
-        return True  # Redis down: assume AI echo to avoid false disable
-
-    tracker = SentMessageTracker(redis_client)
-    return await tracker.is_ai_sent_message(instance_key, message_id, phone, echo_text)
-
 
 _MEDIA_TYPES = {
     "imageMessage", "videoMessage", "audioMessage", "documentMessage",
