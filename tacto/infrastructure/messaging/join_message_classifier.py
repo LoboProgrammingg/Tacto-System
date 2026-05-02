@@ -84,19 +84,6 @@ class JoinMessageClassifier:
                 )
                 return "ignored"
 
-            # Sender é o telefone da instância → operador/WA Business
-            is_from_instance = sender and await self._phone_cache.is_instance_phone(
-                instance, sender
-            )
-            if is_from_instance:
-                logger.info(
-                    "classified_human_operator_from_me_false",
-                    instance=instance,
-                    sender=sender,
-                    customer_phone=_extract_customer_phone(remote_jid, key, data),
-                )
-                return "human_operator"
-
             return "user"
 
         # ── from_me=True: pode ser echo da IA ou operador humano ──
