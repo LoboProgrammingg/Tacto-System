@@ -180,6 +180,12 @@ class OrderStateService:
 
         return Ok(order)
 
+    async def reset_order_session(
+        self, restaurant_id: UUID, customer_phone: str
+    ) -> Success[bool] | Failure[Exception]:
+        """Delete the current order session entirely."""
+        return await self._port.delete(restaurant_id, customer_phone)
+
     async def set_delivery_address(
         self,
         restaurant_id: UUID,

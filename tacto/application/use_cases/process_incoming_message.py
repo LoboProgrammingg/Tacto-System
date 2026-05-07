@@ -5,7 +5,9 @@ Core use case for processing incoming WhatsApp messages.
 This is the main entry point for the message processing pipeline.
 """
 
+from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
 
@@ -15,6 +17,7 @@ from tacto.application.ports.agent_port import BaseAgent
 from tacto.application.factories.agent_factory import AgentFactory
 from tacto.domain.ai_assistance.value_objects.agent_context import AgentContext
 from tacto.application.services.memory_orchestration_service import MemoryManager
+from tacto.application.services.order_state_service import OrderStateService
 from tacto.application.ports.embedding_client import EmbeddingClient
 from tacto.application.ports.menu_provider import MenuProvider
 from tacto.application.ports.messaging_client import MessagingClient
@@ -31,6 +34,16 @@ from tacto.shared.domain.value_objects import PhoneNumber
 
 
 logger = structlog.get_logger()
+
+_WEEKDAY_NAMES_PT = {
+    0: "segunda-feira",
+    1: "terça-feira",
+    2: "quarta-feira",
+    3: "quinta-feira",
+    4: "sexta-feira",
+    5: "sábado",
+    6: "domingo",
+}
 
 
 class ProcessIncomingMessageUseCase:
@@ -57,6 +70,7 @@ class ProcessIncomingMessageUseCase:
         ai_agent: Optional[BaseAgent] = None,
         agent_factory: Optional[AgentFactory] = None,
         memory_manager: Optional[MemoryManager] = None,
+        order_service: Optional[OrderStateService] = None,
         menu_provider: Optional[MenuProvider] = None,
         vector_store: Optional[VectorStore] = None,
         embedding_client: Optional[EmbeddingClient] = None,
@@ -68,6 +82,7 @@ class ProcessIncomingMessageUseCase:
         self._ai_agent = ai_agent
         self._agent_factory = agent_factory
         self._memory_manager = memory_manager
+        self._order_service = order_service
         self._menu_provider = menu_provider
         self._vector_store = vector_store
         self._embedding_client = embedding_client
@@ -145,6 +160,10 @@ class ProcessIncomingMessageUseCase:
                 log.info("Created new conversation")
 
         source = MessageSource(dto.source)
+        _settings = get_settings()
+        context_was_stale = conversation.is_stale_for_context(
+            _settings.app.conversation_reset_after_hours
+        )
 
         if source.is_human_intervention:
             if conversation.is_ai_active:
@@ -196,20 +215,28 @@ class ProcessIncomingMessageUseCase:
             await self._conversation_repo.save(conversation)
             log.info("AI auto-enabled after expired disable period")
 
-        _settings = get_settings()
-        recent_messages_result = await self._message_repo.find_recent_by_conversation(
-            conversation.id, limit=_settings.app.conversation_history_limit
-        )
+        conversation_history: list[dict[str, str]] = []
+        if context_was_stale:
+            log.info(
+                "conversation_context_reset_due_to_inactivity",
+                customer_phone=dto.clean_phone,
+                reset_after_hours=_settings.app.conversation_reset_after_hours,
+            )
+            await self._reset_transient_context(restaurant.id.value, dto.clean_phone)
+        else:
+            recent_messages_result = await self._message_repo.find_recent_by_conversation(
+                conversation.id, limit=_settings.app.conversation_history_limit
+            )
 
-        if isinstance(recent_messages_result, Failure):
-            return recent_messages_result
+            if isinstance(recent_messages_result, Failure):
+                return recent_messages_result
 
-        recent_messages = recent_messages_result.value
+            recent_messages = recent_messages_result.value
 
-        conversation_history = [
-            {"role": "user" if m.direction.is_incoming else "assistant", "content": m.body}
-            for m in recent_messages
-        ]
+            conversation_history = [
+                {"role": "user" if m.direction.is_incoming else "assistant", "content": m.body}
+                for m in recent_messages
+            ]
 
         # Semantic search — embed customer message and find relevant menu items
         # Level 2 (ADVANCED) uses enhanced RAG with prices
@@ -285,6 +312,7 @@ class ProcessIncomingMessageUseCase:
         # BYPASS_HOURS_CHECK=true forces open state — useful for local testing
         is_open = True if _settings.app.bypass_hours_check else restaurant.is_open_now()
         next_opening_text = restaurant.opening_hours.get_next_opening(restaurant.timezone)
+        current_datetime = self._get_restaurant_current_datetime(restaurant.timezone)
 
         persona = restaurant.agent_config
         agent_context = AgentContext(
@@ -299,6 +327,11 @@ class ProcessIncomingMessageUseCase:
             automation_level=restaurant.automation_type,
             is_open=is_open,
             next_opening_text=next_opening_text,
+            restaurant_timezone=str(current_datetime.tzinfo),
+            current_datetime_iso=current_datetime.isoformat(),
+            current_date_br=current_datetime.strftime("%d/%m/%Y"),
+            current_time_br=current_datetime.strftime("%H:%M"),
+            current_weekday_pt=_WEEKDAY_NAMES_PT[current_datetime.weekday()],
             rag_context=rag_context,
             tacto_address=tacto_address,
             tacto_hours=tacto_hours,
@@ -356,6 +389,7 @@ class ProcessIncomingMessageUseCase:
             )
 
         response_text = agent_response.message
+        disabled_by_current_response = False
 
         _disable_hours = get_settings().app.ai_disable_hours
         if "human_handoff" in agent_response.triggered_actions:
@@ -363,6 +397,7 @@ class ProcessIncomingMessageUseCase:
             # Customer asked for a human — disable AI so the attendant can take over.
             conversation.disable_ai(reason="customer_requested_human_handoff", duration_hours=_disable_hours)
             await self._conversation_repo.save(conversation)
+            disabled_by_current_response = True
 
         # Level 2 handoff: Customer confirmed order, need human to finalize (delivery fee + confirm)
         if "handoff_to_human" in agent_response.triggered_actions:
@@ -373,37 +408,27 @@ class ProcessIncomingMessageUseCase:
             )
             conversation.disable_ai(reason="order_confirmed_awaiting_human", duration_hours=_disable_hours)
             await self._conversation_repo.save(conversation)
-
-        if "restaurant_closed" in agent_response.triggered_actions:
-            log.info("restaurant_closed_disabled_ai", customer_phone=dto.clean_phone)
-            # Restaurant is closed — disable AI until buffer_minutes before next opening.
-            # Multi-tenant: each restaurant has its own timezone and opening schedule.
-            conversation.disable_ai_until_opening(
-                opening_hours=restaurant.opening_hours,
-                tz=restaurant.timezone,
-                buffer_minutes=_settings.app.ai_reopen_buffer_minutes,
-                fallback_hours=_disable_hours,
-            )
-            await self._conversation_repo.save(conversation)
+            disabled_by_current_response = True
 
         # --- RACE CONDITION MITIGATION ---
         # Re-fetch conversation to check if a human intervened during the AI generation time.
-        refresh_result = await self._conversation_repo.find_by_restaurant_and_phone(
-            restaurant.id, phone
-        )
-        if isinstance(refresh_result, Success) and refresh_result.value:
-            refreshed_conv = refresh_result.value
-            if not refreshed_conv.can_ai_respond():
-                log.info("human_intervened_during_generation_aborting_send", customer_phone=dto.clean_phone)
-                return Ok(
-                    MessageResponseDTO(
-                        success=True,
-                        message_id=str(incoming_message.id.value),
-                        response_sent=False,
-                        ai_disabled=True,
-                        ai_disabled_reason="Human intervened during generation",
+        if not disabled_by_current_response:
+            refresh_result = await self._conversation_repo.find_by_restaurant_and_phone(
+                restaurant.id, phone
+            )
+            if isinstance(refresh_result, Success) and refresh_result.value:
+                refreshed_conv = refresh_result.value
+                if not refreshed_conv.can_ai_respond():
+                    log.info("human_intervened_during_generation_aborting_send", customer_phone=dto.clean_phone)
+                    return Ok(
+                        MessageResponseDTO(
+                            success=True,
+                            message_id=str(incoming_message.id.value),
+                            response_sent=False,
+                            ai_disabled=True,
+                            ai_disabled_reason="Human intervened during generation",
+                        )
                     )
-                )
 
         send_result = await self._messaging_client.send_message(
             instance_key=dto.instance_key,
@@ -520,6 +545,36 @@ class ProcessIncomingMessageUseCase:
                 phone=customer_phone,
             )
 
+    async def _reset_transient_context(
+        self,
+        restaurant_id,
+        customer_phone: str,
+    ) -> None:
+        """Clear ephemeral context so a stale thread behaves like a new session."""
+        if self._memory_manager:
+            memory_result = await self._memory_manager.clear_session_context(
+                restaurant_id,
+                customer_phone,
+            )
+            if isinstance(memory_result, Failure):
+                logger.warning(
+                    "session_memory_reset_failed",
+                    phone=customer_phone,
+                    error=str(memory_result.error),
+                )
+
+        if self._order_service:
+            order_result = await self._order_service.reset_order_session(
+                restaurant_id,
+                customer_phone,
+            )
+            if isinstance(order_result, Failure):
+                logger.warning(
+                    "session_order_reset_failed",
+                    phone=customer_phone,
+                    error=str(order_result.error),
+                )
+
     def _select_agent(self, automation_type: AutomationType) -> Optional[BaseAgent]:
         """
         Select the appropriate AI agent based on automation type.
@@ -548,3 +603,21 @@ class ProcessIncomingMessageUseCase:
             if content:
                 lines.append(f"• {content}")
         return "\n".join(lines)
+
+    @staticmethod
+    def _get_restaurant_current_datetime(restaurant_timezone: str) -> datetime:
+        """Return the current local datetime for the restaurant timezone."""
+        settings = get_settings()
+        timezone_name = restaurant_timezone or settings.app.default_timezone
+
+        try:
+            timezone_obj = ZoneInfo(timezone_name)
+        except ZoneInfoNotFoundError:
+            logger.warning(
+                "invalid_restaurant_timezone_falling_back_to_default",
+                restaurant_timezone=restaurant_timezone,
+                fallback_timezone=settings.app.default_timezone,
+            )
+            timezone_obj = ZoneInfo(settings.app.default_timezone)
+
+        return datetime.now(timezone_obj)

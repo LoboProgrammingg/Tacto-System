@@ -9,9 +9,10 @@ Tests the core message processing pipeline:
 5. Message sending via WhatsApp
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -143,6 +144,22 @@ def mock_ai_agent() -> MagicMock:
     return agent
 
 
+@pytest.fixture
+def mock_memory_manager() -> MagicMock:
+    """Create mock memory manager."""
+    manager = MagicMock()
+    manager.clear_session_context = AsyncMock(return_value=Success(True))
+    return manager
+
+
+@pytest.fixture
+def mock_order_service() -> MagicMock:
+    """Create mock order service."""
+    service = MagicMock()
+    service.reset_order_session = AsyncMock(return_value=Success(True))
+    return service
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Test Classes
 # ──────────────────────────────────────────────────────────────────────────────
@@ -171,6 +188,7 @@ class TestProcessIncomingMessageUseCase:
 
         with patch("tacto.application.use_cases.process_incoming_message.get_settings") as mock_settings:
             mock_settings.return_value.app.conversation_history_limit = 10
+            mock_settings.return_value.app.conversation_reset_after_hours = 24
             mock_settings.return_value.app.bypass_hours_check = True
             mock_settings.return_value.app.ai_disable_hours = 12
             mock_settings.return_value.gemini.level1_rag_search_limit = 5
@@ -184,9 +202,54 @@ class TestProcessIncomingMessageUseCase:
 
         # Verify interactions
         mock_restaurant_repository.find_by_canal_master_id.assert_called_once()
-        mock_conversation_repository.find_by_restaurant_and_phone.assert_called_once()
+        assert mock_conversation_repository.find_by_restaurant_and_phone.call_count == 2
         mock_ai_agent.process.assert_called_once()
         mock_messaging_client.send_message.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_passes_exact_restaurant_local_datetime_to_agent_context(
+        self,
+        mock_restaurant_repository,
+        mock_conversation_repository,
+        mock_message_repository,
+        mock_messaging_client,
+        mock_ai_agent,
+        incoming_message_dto,
+    ):
+        """Agent context should include the exact current local datetime for the restaurant."""
+        use_case = ProcessIncomingMessageUseCase(
+            restaurant_repository=mock_restaurant_repository,
+            conversation_repository=mock_conversation_repository,
+            message_repository=mock_message_repository,
+            messaging_client=mock_messaging_client,
+            ai_agent=mock_ai_agent,
+        )
+
+        with patch("tacto.application.use_cases.process_incoming_message.get_settings") as mock_settings:
+            mock_settings.return_value.app.conversation_history_limit = 10
+            mock_settings.return_value.app.conversation_reset_after_hours = 24
+            mock_settings.return_value.app.bypass_hours_check = True
+            mock_settings.return_value.app.ai_disable_hours = 12
+            mock_settings.return_value.app.default_timezone = "America/Cuiaba"
+            mock_settings.return_value.gemini.level1_rag_search_limit = 5
+
+            with patch.object(
+                ProcessIncomingMessageUseCase,
+                "_get_restaurant_current_datetime",
+                return_value=datetime(2026, 5, 2, 9, 30, tzinfo=ZoneInfo("America/Cuiaba")),
+            ):
+                result = await use_case.execute(incoming_message_dto)
+
+        assert isinstance(result, Success)
+
+        _, call_kwargs = mock_ai_agent.process.call_args
+        context = call_kwargs["context"]
+
+        assert context.restaurant_timezone == "America/Cuiaba"
+        assert context.current_weekday_pt == "sábado"
+        assert context.current_date_br == "02/05/2026"
+        assert context.current_time_br == "09:30"
+        assert context.current_datetime_iso == "2026-05-02T09:30:00-04:00"
 
     @pytest.mark.asyncio
     async def test_restaurant_not_found(
@@ -307,6 +370,7 @@ class TestProcessIncomingMessageUseCase:
 
         with patch("tacto.application.use_cases.process_incoming_message.get_settings") as mock_settings:
             mock_settings.return_value.app.conversation_history_limit = 10
+            mock_settings.return_value.app.conversation_reset_after_hours = 24
             mock_settings.return_value.app.bypass_hours_check = True
             mock_settings.return_value.app.ai_disable_hours = 12
             mock_settings.return_value.gemini.level1_rag_search_limit = 5
@@ -316,6 +380,53 @@ class TestProcessIncomingMessageUseCase:
         assert isinstance(result, Success)
         # Conversation should be saved (created)
         assert mock_conversation_repository.save.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_stale_conversation_resets_transient_context(
+        self,
+        mock_restaurant_repository,
+        mock_conversation_repository,
+        mock_message_repository,
+        mock_messaging_client,
+        mock_ai_agent,
+        mock_conversation,
+        incoming_message_dto,
+        mock_memory_manager,
+        mock_order_service,
+    ):
+        """Old inactive conversations should ignore previous context and clear transient state."""
+        mock_conversation.last_message_at = datetime.now(timezone.utc) - timedelta(hours=49)
+        mock_message_repository.find_recent_by_conversation = AsyncMock(
+            return_value=Success([MagicMock(body="hist", direction=MagicMock(is_incoming=True))])
+        )
+
+        use_case = ProcessIncomingMessageUseCase(
+            restaurant_repository=mock_restaurant_repository,
+            conversation_repository=mock_conversation_repository,
+            message_repository=mock_message_repository,
+            messaging_client=mock_messaging_client,
+            ai_agent=mock_ai_agent,
+            memory_manager=mock_memory_manager,
+            order_service=mock_order_service,
+        )
+
+        with patch("tacto.application.use_cases.process_incoming_message.get_settings") as mock_settings:
+            mock_settings.return_value.app.conversation_history_limit = 10
+            mock_settings.return_value.app.conversation_reset_after_hours = 24
+            mock_settings.return_value.app.bypass_hours_check = True
+            mock_settings.return_value.app.ai_disable_hours = 12
+            mock_settings.return_value.gemini.level1_rag_search_limit = 5
+
+            result = await use_case.execute(incoming_message_dto)
+
+        assert isinstance(result, Success)
+        assert result.value.response_sent is True
+        mock_message_repository.find_recent_by_conversation.assert_not_called()
+        mock_memory_manager.clear_session_context.assert_called_once()
+        mock_order_service.reset_order_session.assert_called_once()
+
+        _, kwargs = mock_ai_agent.process.await_args
+        assert kwargs["conversation_history"] == []
 
 
 class TestProcessIncomingMessageTriggeredActions:
@@ -349,6 +460,7 @@ class TestProcessIncomingMessageTriggeredActions:
 
         with patch("tacto.application.use_cases.process_incoming_message.get_settings") as mock_settings:
             mock_settings.return_value.app.conversation_history_limit = 10
+            mock_settings.return_value.app.conversation_reset_after_hours = 24
             mock_settings.return_value.app.bypass_hours_check = True
             mock_settings.return_value.app.ai_disable_hours = 12
             mock_settings.return_value.gemini.level1_rag_search_limit = 5
@@ -370,7 +482,7 @@ class TestProcessIncomingMessageTriggeredActions:
         mock_ai_agent,
         incoming_message_dto,
     ):
-        """Test that restaurant_closed action disables AI until opening."""
+        """Test that restaurant_closed action still replies without disabling the conversation."""
         # Configure agent to trigger restaurant_closed
         agent_response = MagicMock()
         agent_response.message = "Estamos fechados. Abrimos amanhã às 11h."
@@ -388,6 +500,7 @@ class TestProcessIncomingMessageTriggeredActions:
 
         with patch("tacto.application.use_cases.process_incoming_message.get_settings") as mock_settings:
             mock_settings.return_value.app.conversation_history_limit = 10
+            mock_settings.return_value.app.conversation_reset_after_hours = 24
             mock_settings.return_value.app.bypass_hours_check = True
             mock_settings.return_value.app.ai_disable_hours = 12
             mock_settings.return_value.app.ai_reopen_buffer_minutes = 30
@@ -397,6 +510,7 @@ class TestProcessIncomingMessageTriggeredActions:
 
         assert isinstance(result, Success)
         assert result.value.response_sent is True
+        assert mock_conversation_repository.save.call_count == 1
 
 
 class TestProcessIncomingMessageErrorHandling:
@@ -427,6 +541,7 @@ class TestProcessIncomingMessageErrorHandling:
 
         with patch("tacto.application.use_cases.process_incoming_message.get_settings") as mock_settings:
             mock_settings.return_value.app.conversation_history_limit = 10
+            mock_settings.return_value.app.conversation_reset_after_hours = 24
             mock_settings.return_value.app.bypass_hours_check = True
             mock_settings.return_value.gemini.level1_rag_search_limit = 5
 
@@ -461,6 +576,7 @@ class TestProcessIncomingMessageErrorHandling:
 
         with patch("tacto.application.use_cases.process_incoming_message.get_settings") as mock_settings:
             mock_settings.return_value.app.conversation_history_limit = 10
+            mock_settings.return_value.app.conversation_reset_after_hours = 24
             mock_settings.return_value.app.bypass_hours_check = True
             mock_settings.return_value.app.ai_disable_hours = 12
             mock_settings.return_value.gemini.level1_rag_search_limit = 5

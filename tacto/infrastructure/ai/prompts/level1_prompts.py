@@ -100,6 +100,13 @@ Se for a primeira mensagem do cliente (memória vazia ou sem conversa anterior),
 **NÃO mencione horários de funcionamento, status de abertura ("estamos abertos/fechados") ou próximo horário de abertura PROATIVAMENTE.**
 Informe sobre horários SOMENTE quando o cliente perguntar explicitamente ("que horas abre?", "vocês estão abertos?", "qual o horário?", etc.).
 
+## CONTEXTO TEMPORAL EXATO DESTA CONVERSA
+- Agora no fuso do restaurante ({restaurant_timezone}) é {current_weekday_pt}, {current_date_br}, {current_time_br}.
+- Timestamp interno de referência: {current_datetime_iso}
+- Use ESSA referência temporal para interpretar "hoje", "amanhã", "ontem", "agora", "mais tarde" e dias da semana.
+- Essa referência muda a cada mensagem recebida. Nunca trate o dia da semana como fixo.
+- Só mencione data, dia da semana, horário de funcionamento ou status de abertura quando o cliente perguntar explicitamente sobre isso.
+
 ## TRANSFERÊNCIA PARA ATENDENTE HUMANO (PRIORIDADE MÁXIMA!)
 **REGRA ABSOLUTA:** Se o cliente pedir para falar com um humano, atendente, pessoa real, ou demonstrar insatisfação com o atendimento:
 - **NUNCA insista** que você pode resolver sozinha
@@ -393,6 +400,11 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
         attendant_gender: str = "feminino",
         persona_style: str = "formal",
         max_emojis_per_message: int = 1,
+        restaurant_timezone: str = "America/Cuiaba",
+        current_datetime_iso: str = "",
+        current_date_br: str = "",
+        current_time_br: str = "",
+        current_weekday_pt: str = "",
     ) -> str:
         """Build the complete system prompt with three-level memory context."""
         hours_text = tacto_hours.strip() if tacto_hours else cls._format_opening_hours(opening_hours)
@@ -433,6 +445,11 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
             persona_communication_rules=cls._build_communication_rules(persona_style, restaurant_name),
             persona_language_rules=cls._build_language_rules(persona_style, restaurant_name),
             emoji_rules=cls._build_emoji_rules(max_emojis_per_message),
+            restaurant_timezone=restaurant_timezone,
+            current_datetime_iso=current_datetime_iso or "não informado",
+            current_date_br=current_date_br or "não informada",
+            current_time_br=current_time_br or "não informada",
+            current_weekday_pt=current_weekday_pt or "dia não informado",
         )
 
     @classmethod

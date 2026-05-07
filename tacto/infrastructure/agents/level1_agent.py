@@ -232,6 +232,11 @@ class Level1Agent(BaseAgent):
                 attendant_gender=context.attendant_gender,
                 persona_style=context.persona_style,
                 max_emojis_per_message=context.max_emojis_per_message,
+                restaurant_timezone=context.restaurant_timezone,
+                current_datetime_iso=context.current_datetime_iso,
+                current_date_br=context.current_date_br,
+                current_time_br=context.current_time_br,
+                current_weekday_pt=context.current_weekday_pt,
             )
 
             history = []

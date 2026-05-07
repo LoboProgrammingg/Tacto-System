@@ -74,6 +74,10 @@ class AppSettings(BaseSettings):
     ai_disable_hours: int = Field(default=12, alias="AI_DISABLE_HOURS")
     ai_reopen_buffer_minutes: int = Field(default=10, alias="AI_REOPEN_BUFFER_MINUTES")
     conversation_history_limit: int = Field(default=10, alias="CONVERSATION_HISTORY_LIMIT")
+    conversation_reset_after_hours: int = Field(
+        default=24,
+        alias="CONVERSATION_RESET_AFTER_HOURS",
+    )
 
     # Testing / override flags
     bypass_hours_check: bool = Field(

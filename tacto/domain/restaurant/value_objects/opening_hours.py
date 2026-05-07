@@ -33,9 +33,9 @@ class DayOfWeek(str, Enum):
         return days[dt.weekday()]
 
     @classmethod
-    def today(cls) -> "DayOfWeek":
-        """Get current day of week."""
-        return cls.from_datetime(datetime.now())
+    def today(cls, tz: str = "America/Cuiaba") -> "DayOfWeek":
+        """Get current day of week in the given timezone."""
+        return cls.from_datetime(datetime.now(ZoneInfo(tz)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,9 +163,9 @@ class OpeningHours:
         schedule = self.get_schedule(today)
         return schedule.is_open_at(now.time())
 
-    def get_today_hours(self) -> str:
-        """Get formatted hours for today only."""
-        today = DayOfWeek.today()
+    def get_today_hours(self, tz: str = "America/Cuiaba") -> str:
+        """Get formatted hours for today only in the given timezone."""
+        today = DayOfWeek.today(tz)
         schedule = self.get_schedule(today)
         return schedule.formatted_hours
 
@@ -246,9 +246,9 @@ class OpeningHours:
 
         return None
 
-    def get_today_schedule(self) -> DaySchedule:
-        """Get schedule for today."""
-        today = DayOfWeek.today()
+    def get_today_schedule(self, tz: str = "America/Cuiaba") -> DaySchedule:
+        """Get schedule for today in the given timezone."""
+        today = DayOfWeek.today(tz)
         return self.get_schedule(today)
 
     def to_dict(self) -> dict[str, Any]:

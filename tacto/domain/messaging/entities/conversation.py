@@ -67,6 +67,23 @@ class Conversation:
             
         return self.is_ai_active
 
+    def is_stale_for_context(
+        self,
+        reset_after_hours: int,
+        now: Optional[datetime] = None,
+    ) -> bool:
+        """
+        Check whether the conversation context should be ignored due to inactivity.
+
+        This preserves the same conversation record while treating a long-inactive
+        thread as a new logical session for AI context purposes.
+        """
+        if self.last_message_at is None:
+            return False
+
+        current_time = now or datetime.now(timezone.utc)
+        return self.last_message_at <= current_time - timedelta(hours=reset_after_hours)
+
     def _add_event(self, event: DomainEvent) -> None:
         """Acumula evento para despacho após persistência."""
         self.pending_events.append(event)

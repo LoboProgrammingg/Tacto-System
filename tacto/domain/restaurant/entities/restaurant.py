@@ -95,7 +95,7 @@ class Restaurant:
 
     def get_today_hours(self) -> str:
         """Get formatted opening hours for today."""
-        return self.opening_hours.get_today_hours()
+        return self.opening_hours.get_today_hours(self.timezone)
 
     def can_process_ai_response(self) -> bool:
         """Check if AI can process responses for this restaurant."""

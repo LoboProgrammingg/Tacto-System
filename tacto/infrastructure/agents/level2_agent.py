@@ -261,6 +261,11 @@ class Level2Agent(BaseAgent):
                 medium_term_memory=medium_term_memory,
                 long_term_memory=long_term_memory,
                 custom_prompt=context.prompt_default or "",
+                restaurant_timezone=context.restaurant_timezone,
+                current_datetime_iso=context.current_datetime_iso,
+                current_date_br=context.current_date_br,
+                current_time_br=context.current_time_br,
+                current_weekday_pt=context.current_weekday_pt,
             )
 
             # Build conversation history

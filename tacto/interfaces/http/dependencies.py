@@ -108,6 +108,7 @@ async def create_and_execute_process_message(
                 memory_manager=memory_manager,
                 order_service=order_service,
             ),
+            order_service=order_service,
             menu_provider=menu_provider,
             vector_store=PgvectorStore(session),
             embedding_client=embedding_client,

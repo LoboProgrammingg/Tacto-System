@@ -172,6 +172,30 @@ class MemoryOrchestrationService:
             restaurant_id, customer_phone, query, limit
         )
 
+    async def clear_session_context(
+        self,
+        restaurant_id: UUID,
+        customer_phone: str,
+    ) -> Success[bool] | Failure[Exception]:
+        """Clear only short and medium-term memories for a fresh conversation session."""
+        short_result = await self._short_term.clear(
+            restaurant_id,
+            customer_phone,
+            MemoryType.SHORT_TERM,
+        )
+        if isinstance(short_result, Failure):
+            return short_result
+
+        medium_result = await self._short_term.clear(
+            restaurant_id,
+            customer_phone,
+            MemoryType.MEDIUM_TERM,
+        )
+        if isinstance(medium_result, Failure):
+            return medium_result
+
+        return Success(True)
+
 
 # Alias for backward compatibility during migration
 MemoryManager = MemoryOrchestrationService

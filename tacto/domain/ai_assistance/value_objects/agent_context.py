@@ -24,6 +24,11 @@ class AgentContext:
     automation_level: int = 1
     is_open: bool = True
     next_opening_text: str = ""
+    restaurant_timezone: str = "America/Cuiaba"
+    current_datetime_iso: str = ""
+    current_date_br: str = ""
+    current_time_br: str = ""
+    current_weekday_pt: str = ""
     rag_context: str = ""               # semantic search results (no price)
     tacto_address: str = ""             # address from Tacto rag-full
     tacto_hours: str = ""               # opening hours from Tacto rag-full

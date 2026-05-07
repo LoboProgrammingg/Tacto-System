@@ -151,6 +151,13 @@ Após coletar todos os dados (itens, endereço, pagamento), você SEMPRE:
 2. Informa que um atendente irá confirmar a **taxa de entrega**
 3. Pede para o cliente **aguardar** a confirmação final por um humano
 
+## CONTEXTO TEMPORAL EXATO DESTA CONVERSA
+- Agora no fuso do restaurante ({restaurant_timezone}) é {current_weekday_pt}, {current_date_br}, {current_time_br}.
+- Timestamp interno de referência: {current_datetime_iso}
+- Use ESSA referência temporal para interpretar "hoje", "amanhã", "ontem", "agora", "mais tarde" e dias da semana.
+- Essa referência muda a cada mensagem recebida. Nunca trate o dia da semana como fixo.
+- Só mencione data, dia da semana, horário de funcionamento ou status de abertura quando o cliente perguntar explicitamente sobre isso.
+
 ## COMO VOCÊ FALA
 {persona_communication_rules}
 
@@ -439,6 +446,11 @@ Até logo! 👋"""
         medium_term_memory: str = "",
         long_term_memory: str = "",
         custom_prompt: str = "",
+        restaurant_timezone: str = "America/Cuiaba",
+        current_datetime_iso: str = "",
+        current_date_br: str = "",
+        current_time_br: str = "",
+        current_weekday_pt: str = "",
     ) -> str:
         """
         Build the complete system prompt for Level 2 agent.
@@ -478,6 +490,11 @@ Até logo! 👋"""
             persona_communication_rules=Level1Prompts._build_communication_rules(persona_style, restaurant_name),
             persona_language_rules=Level1Prompts._build_language_rules(persona_style, restaurant_name),
             emoji_rules=Level1Prompts._build_emoji_rules(max_emojis_per_message),
+            restaurant_timezone=restaurant_timezone,
+            current_datetime_iso=current_datetime_iso or "não informado",
+            current_date_br=current_date_br or "não informada",
+            current_time_br=current_time_br or "não informada",
+            current_weekday_pt=current_weekday_pt or "dia não informado",
         )
 
     @classmethod

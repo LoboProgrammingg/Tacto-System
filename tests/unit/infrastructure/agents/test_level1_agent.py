@@ -184,6 +184,37 @@ class TestLevel1AgentRAGContext:
                     system_prompt = input_dict.get("system_prompt", "")
                     assert "Margherita" in system_prompt or "cardápio" in system_prompt.lower()
 
+    def test_includes_exact_current_datetime_in_system_prompt(
+        self,
+        agent_context: AgentContext,
+    ):
+        """System prompt should carry the exact local datetime for the current conversation."""
+        agent_context.restaurant_timezone = "America/Cuiaba"
+        agent_context.current_weekday_pt = "sábado"
+        agent_context.current_date_br = "02/05/2026"
+        agent_context.current_time_br = "09:30"
+        agent_context.current_datetime_iso = "2026-05-02T09:30:00-04:00"
+
+        prompt = Level1Prompts.build_system_prompt(
+            restaurant_name=agent_context.restaurant_name,
+            menu_url=agent_context.menu_url,
+            opening_hours=agent_context.opening_hours,
+            custom_prompt=agent_context.prompt_default,
+            customer_name=agent_context.customer_name,
+            rag_context=agent_context.rag_context,
+            tacto_address=agent_context.tacto_address,
+            tacto_hours=agent_context.tacto_hours,
+            restaurant_timezone=agent_context.restaurant_timezone,
+            current_weekday_pt=agent_context.current_weekday_pt,
+            current_date_br=agent_context.current_date_br,
+            current_time_br=agent_context.current_time_br,
+            current_datetime_iso=agent_context.current_datetime_iso,
+        )
+
+        assert "sábado, 02/05/2026, 09:30" in prompt
+        assert "2026-05-02T09:30:00-04:00" in prompt
+        assert "Nunca trate o dia da semana como fixo" in prompt
+
 
 class TestLevel1AgentInitialization:
     """Test agent initialization."""
@@ -324,8 +355,8 @@ class TestLevel1PromptsUnit:
 
         assert "Pizzaria do João" in prompt
 
-    def test_build_system_prompt_includes_menu_url(self):
-        """System prompt should include menu URL."""
+    def test_build_system_prompt_forbids_url_reproduction(self):
+        """System prompt should forbid the LLM from reproducing menu URLs directly."""
         prompt = Level1Prompts.build_system_prompt(
             restaurant_name="Restaurante",
             menu_url="https://meu-cardapio.com",
@@ -337,7 +368,8 @@ class TestLevel1PromptsUnit:
             custom_prompt=None,
         )
 
-        assert "meu-cardapio.com" in prompt
+        assert "NUNCA escreva links ou URLs na sua resposta" in prompt
+        assert "NUNCA copie, mencione ou reproduza qualquer URL" in prompt
 
     def test_get_closed_response_mentions_opening(self):
         """Closed response should mention when restaurant opens."""
