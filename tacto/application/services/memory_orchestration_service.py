@@ -196,6 +196,37 @@ class MemoryOrchestrationService:
 
         return Success(True)
 
+    async def clear_all_context(
+        self,
+        restaurant_id: UUID,
+        customer_phone: str,
+    ) -> Success[bool] | Failure[Exception]:
+        """Wipe everything: short, medium, AND long-term memory.
+
+        Used when a conversation goes stale (customer returns after long
+        inactivity) and the AI must restart from scratch with no leakage
+        of past context.
+        """
+        short_result = await self._short_term.clear(
+            restaurant_id, customer_phone, MemoryType.SHORT_TERM,
+        )
+        if isinstance(short_result, Failure):
+            return short_result
+
+        medium_result = await self._short_term.clear(
+            restaurant_id, customer_phone, MemoryType.MEDIUM_TERM,
+        )
+        if isinstance(medium_result, Failure):
+            return medium_result
+
+        long_result = await self._long_term.clear(
+            restaurant_id, customer_phone, MemoryType.LONG_TERM,
+        )
+        if isinstance(long_result, Failure):
+            return long_result
+
+        return Success(True)
+
 
 # Alias for backward compatibility during migration
 MemoryManager = MemoryOrchestrationService

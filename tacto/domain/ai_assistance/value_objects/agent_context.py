@@ -36,3 +36,4 @@ class AgentContext:
     attendant_gender: str = "feminino"  # "feminino" | "masculino" | "neutro"
     persona_style: str = "formal"       # "formal" | "informal"
     max_emojis_per_message: int = 1     # 0–5 emojis per message
+    is_stale: bool = False              # True when conversation reset due to inactivity → skip memory

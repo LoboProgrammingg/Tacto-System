@@ -149,6 +149,7 @@ def mock_memory_manager() -> MagicMock:
     """Create mock memory manager."""
     manager = MagicMock()
     manager.clear_session_context = AsyncMock(return_value=Success(True))
+    manager.clear_all_context = AsyncMock(return_value=Success(True))
     return manager
 
 
@@ -422,7 +423,7 @@ class TestProcessIncomingMessageUseCase:
         assert isinstance(result, Success)
         assert result.value.response_sent is True
         mock_message_repository.find_recent_by_conversation.assert_not_called()
-        mock_memory_manager.clear_session_context.assert_called_once()
+        mock_memory_manager.clear_all_context.assert_called_once()
         mock_order_service.reset_order_session.assert_called_once()
 
         _, kwargs = mock_ai_agent.process.await_args

@@ -339,6 +339,7 @@ class ProcessIncomingMessageUseCase:
             attendant_gender=persona.effective_gender(_settings.app.attendant_gender),
             persona_style=persona.effective_persona_style(_settings.app.attendant_persona_style),
             max_emojis_per_message=persona.effective_max_emojis(_settings.app.attendant_max_emojis),
+            is_stale=context_was_stale,
         )
 
         selected_agent = self._select_agent(restaurant.automation_type)
@@ -409,6 +410,9 @@ class ProcessIncomingMessageUseCase:
             conversation.disable_ai(reason="order_confirmed_awaiting_human", duration_hours=_disable_hours)
             await self._conversation_repo.save(conversation)
             disabled_by_current_response = True
+
+        if "restaurant_closed" in agent_response.triggered_actions:
+            log.info("restaurant_closed_message_sent", customer_phone=dto.clean_phone)
 
         # --- RACE CONDITION MITIGATION ---
         # Re-fetch conversation to check if a human intervened during the AI generation time.
@@ -550,9 +554,13 @@ class ProcessIncomingMessageUseCase:
         restaurant_id,
         customer_phone: str,
     ) -> None:
-        """Clear ephemeral context so a stale thread behaves like a new session."""
+        """Wipe ALL context (short, medium, long-term + order session) so a
+        stale thread behaves like a fresh session with no leakage from past
+        conversations. Triggered when last_message_at exceeds
+        CONVERSATION_RESET_AFTER_HOURS.
+        """
         if self._memory_manager:
-            memory_result = await self._memory_manager.clear_session_context(
+            memory_result = await self._memory_manager.clear_all_context(
                 restaurant_id,
                 customer_phone,
             )
