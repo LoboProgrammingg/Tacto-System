@@ -142,13 +142,20 @@ class Level1Agent(BaseAgent):
             customer_name = context.customer_name or "Cliente"
             triggered_actions = []
 
-            # Check if restaurant is closed — before calling LLM to save tokens
-            if not context.is_open:
+            # Closed-restaurant template fires ONLY when the customer explicitly asks
+            # about opening hours / open status. For any other message, let the LLM
+            # converse normally — the system prompt already instructs it not to
+            # volunteer hours/closed status proactively.
+            if not context.is_open and Level1Prompts.is_hours_question(message):
                 closed_message = Level1Prompts.get_closed_response(
                     menu_url=context.menu_url,
                     next_opening=context.next_opening_text,
                 )
-                log.info("restaurant_closed", customer_phone=context.customer_phone)
+                log.info(
+                    "restaurant_closed_question_detected",
+                    customer_phone=context.customer_phone,
+                    message_preview=message[:60],
+                )
                 return Ok(
                     AgentResponse(
                         message=closed_message,
@@ -188,7 +195,10 @@ class Level1Agent(BaseAgent):
             medium_term_memory = ""
             long_term_memory = ""
 
-            if self._memory:
+            # When the conversation is stale (user returned after long inactivity),
+            # the use case wiped all memory before invoking the agent. Skip memory
+            # load entirely so any residual rows from a race window cannot leak in.
+            if self._memory and not context.is_stale:
                 memory_result = await self._memory.load_context(
                     context.restaurant_id,
                     context.customer_phone,
@@ -215,6 +225,11 @@ class Level1Agent(BaseAgent):
                         )
                         if extra:
                             long_term_memory = f"{long_term_memory}\n{extra}".strip()
+            elif self._memory and context.is_stale:
+                log.info(
+                    "memory_load_skipped_stale_conversation",
+                    customer_phone=context.customer_phone,
+                )
 
             system_prompt = Level1Prompts.build_system_prompt(
                 restaurant_name=context.restaurant_name,

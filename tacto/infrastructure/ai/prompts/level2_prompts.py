@@ -353,17 +353,17 @@ Por favor, aguarde! Obrigada! 😊"""
 
     HUMAN_HANDOFF_RESPONSE = "Claro! Vou chamar alguém da equipe para te atender! 😊"
 
-    RESTAURANT_CLOSED_TEMPLATE = """Oi! 😊
+    RESTAURANT_CLOSED_TEMPLATE = """Olá! 😊
 
-Infelizmente estamos fechados no momento.
+No momento, estamos fechados.
 
 ⏰ *Próximo horário de funcionamento:*
 {next_opening}
 
-Mas você pode conferir nosso cardápio enquanto isso:
+Se quiser, você já pode conferir o nosso cardápio por aqui:
 📱 {menu_url}
 
-Até logo! 👋"""
+Assim que abrirmos, será um prazer atender você!"""
 
     # -------------------------------------------------------------------------
     # Detection Methods
@@ -422,6 +422,25 @@ Até logo! 👋"""
     def is_order_confirmation(cls, message: str) -> bool:
         """Check if message is confirming an order."""
         return cls.detect_intent(message) == "confirm"
+
+    HOURS_QUESTION_KEYWORDS = [
+        "aberto", "abertos", "aberta", "abertas",
+        "abrindo", "abriram", "abriu", "abriu já", "ja abriu",
+        "fechado", "fechados", "fechada", "fechadas", "fecharam",
+        "funcionando", "funciona ainda", "atendendo", "operando",
+        "que horas", "qual horário", "qual horario", "qual o horário", "qual o horario",
+        "horário", "horario", "horários", "horarios",
+        "abre", "abrem", "fecha", "fecham",
+        "tá aberto", "ta aberto", "tão abertos", "tao abertos",
+        "estão abertos", "está aberto", "estao abertos",
+        "tá funcionando", "ta funcionando",
+    ]
+
+    @classmethod
+    def is_hours_question(cls, message: str) -> bool:
+        """True if customer is explicitly asking about opening hours / open status."""
+        message_lower = message.lower()
+        return any(kw in message_lower for kw in cls.HOURS_QUESTION_KEYWORDS)
 
     # -------------------------------------------------------------------------
     # Prompt Building

@@ -119,6 +119,8 @@ class TestLevel1AgentClosedRestaurant:
 
         assert "cardapio.teste.com" in response
         assert "amanhã" in response.lower() or "11h" in response
+        assert "estamos fechados" in response.lower()
+        assert "será um prazer atender você" in response.lower()
 
 
 class TestLevel1AgentHumanHandoff:
@@ -379,3 +381,124 @@ class TestLevel1PromptsUnit:
         )
 
         assert "segunda" in response.lower() or "11h" in response
+
+    def test_get_closed_response_has_cordial_and_correct_copy(self):
+        """Closed response should be cordial, deterministic, and grammatically correct."""
+        response = Level1Prompts.get_closed_response(
+            menu_url="https://cardapio.com",
+            next_opening="Abrimos hoje às 18:30.",
+        )
+
+        assert response.startswith("Olá! 😊")
+        assert "No momento, estamos fechados." in response
+        assert "Próximo horário de funcionamento" in response
+        assert "Se quiser, você já pode conferir o cardápio por aqui" in response
+        assert "Assim que abrirmos, será um prazer atender você!" in response
+
+    def test_is_hours_question_detects_open_status_questions(self):
+        """is_hours_question must detect explicit hours / open-status questions."""
+        positive_examples = [
+            "Vocês estão abertos?",
+            "tá aberto?",
+            "ja abriu?",
+            "que horas vocês abrem?",
+            "qual o horário de funcionamento?",
+            "tá funcionando?",
+            "horário de hoje",
+            "vocês estão fechados agora?",
+            "abre que horas?",
+        ]
+        for msg in positive_examples:
+            assert Level1Prompts.is_hours_question(msg), f"should match: {msg!r}"
+
+    def test_is_hours_question_returns_false_for_unrelated_messages(self):
+        """is_hours_question must NOT trigger for casual / order messages."""
+        negative_examples = [
+            "Oi",
+            "Olá, tudo bem?",
+            "Quero pedir uma pizza",
+            "Tem entrega?",
+            "Quanto custa o hambúrguer?",
+            "Bom dia",
+        ]
+        for msg in negative_examples:
+            assert not Level1Prompts.is_hours_question(msg), f"should NOT match: {msg!r}"
+
+
+class TestLevel1AgentClosedGating:
+    """Test that closed-template only fires on explicit hours questions."""
+
+    @pytest.mark.asyncio
+    async def test_closed_plus_non_hours_message_invokes_llm(
+        self,
+        closed_context: AgentContext,
+    ):
+        """When restaurant is closed but customer doesn't ask about hours,
+        the agent must NOT short-circuit with the closed template — it must
+        call the LLM normally."""
+        agent = Level1Agent()
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="Oi! Como posso ajudar?")
+                result = await agent.process(
+                    message="Oi",
+                    context=closed_context,
+                    conversation_history=[],
+                )
+
+        assert isinstance(result, Success)
+        assert "restaurant_closed" not in result.value.triggered_actions
+        mock_chain.ainvoke.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_closed_plus_hours_question_returns_template(
+        self,
+        closed_context: AgentContext,
+    ):
+        """When restaurant is closed AND customer asks about hours, the agent
+        must short-circuit with the closed template without calling the LLM."""
+        agent = Level1Agent()
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="should not be called")
+                result = await agent.process(
+                    message="vocês estão abertos?",
+                    context=closed_context,
+                    conversation_history=[],
+                )
+
+        assert isinstance(result, Success)
+        assert "restaurant_closed" in result.value.triggered_actions
+        mock_chain.ainvoke.assert_not_called()
+
+
+class TestLevel1AgentStaleContext:
+    """Test memory load is skipped when context.is_stale=True."""
+
+    @pytest.mark.asyncio
+    async def test_skips_memory_load_when_stale(
+        self,
+        agent_context: AgentContext,
+    ):
+        """When AgentContext.is_stale=True, agent must NOT call memory.load_context
+        nor memory.search_relevant — both are sources of stale leakage."""
+        agent_context.is_stale = True
+        agent = Level1Agent()
+        mock_memory = MagicMock()
+        mock_memory.load_context = AsyncMock()
+        mock_memory.search_relevant = AsyncMock()
+        agent._memory = mock_memory
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="Olá! Como posso ajudar?")
+                await agent.process(
+                    message="Oi",
+                    context=agent_context,
+                    conversation_history=[],
+                )
+
+        mock_memory.load_context.assert_not_called()
+        mock_memory.search_relevant.assert_not_called()

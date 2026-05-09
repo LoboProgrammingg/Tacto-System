@@ -352,15 +352,20 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
     ]
 
     # ---------------------------------------------------------------------------
-    # Response variations for fixed responses (random.choice keeps naturalidade)
+    # Fixed responses
     # ---------------------------------------------------------------------------
 
-    _CLOSED_RESPONSES = [
-        "A gente tá fechado agora. {next_opening}.\nMas já dá pra dar uma olhada no cardápio e escolher com calma:\n👉 {menu_url}",
-        "Fechados no momento! {next_opening}.\nEnquanto isso, o cardápio tá disponível:\n👉 {menu_url}",
-        "Ainda não abrimos. {next_opening}.\nSe quiser, já dá pra conferir o cardápio:\n👉 {menu_url}",
-        "Opa, a gente só abre {next_opening}. Mas pode já escolher pelo cardápio:\n👉 {menu_url}",
-    ]
+    RESTAURANT_CLOSED_TEMPLATE = """Olá! 😊
+
+No momento, estamos fechados.
+
+⏰ *Próximo horário de funcionamento:*
+{next_opening}
+
+Se quiser, você já pode conferir o cardápio por aqui:
+📱 {menu_url}
+
+Assim que abrirmos, será um prazer atender você!"""
 
     _HANDOFF_RESPONSES = [
         "Tá bom, deixa eu chamar alguém aqui pra te ajudar. Aguarda um momento! 😊",
@@ -373,10 +378,7 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
     HUMAN_HANDOFF_RESPONSE = "Tá bom, deixa eu chamar alguém aqui pra te ajudar. Aguarda um momento! 😊"
 
     # Legado — mantido para compatibilidade; prefer get_closed_response()
-    CLOSING_HOURS_RESPONSE = (
-        "A gente tá fechado agora. {next_opening}.\n"
-        "Mas já dá pra conferir o cardápio:\n👉 {menu_url}"
-    )
+    CLOSING_HOURS_RESPONSE = RESTAURANT_CLOSED_TEMPLATE
 
     # ---------------------------------------------------------------------------
     # Public class methods
@@ -472,6 +474,25 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
         message_lower = message.lower()
         return any(kw in message_lower for kw in cls.HUMAN_HANDOFF_KEYWORDS)
 
+    HOURS_QUESTION_KEYWORDS = [
+        "aberto", "abertos", "aberta", "abertas",
+        "abrindo", "abriram", "abriu", "abriu já", "ja abriu",
+        "fechado", "fechados", "fechada", "fechadas", "fecharam",
+        "funcionando", "funciona ainda", "atendendo", "operando",
+        "que horas", "qual horário", "qual horario", "qual o horário", "qual o horario",
+        "horário", "horario", "horários", "horarios",
+        "abre", "abrem", "fecha", "fecham",
+        "tá aberto", "ta aberto", "tão abertos", "tao abertos",
+        "estão abertos", "está aberto", "estao abertos",
+        "tá funcionando", "ta funcionando",
+    ]
+
+    @classmethod
+    def is_hours_question(cls, message: str) -> bool:
+        """True if customer is explicitly asking about opening hours / open status."""
+        message_lower = message.lower()
+        return any(kw in message_lower for kw in cls.HOURS_QUESTION_KEYWORDS)
+
     @classmethod
     def format_menu_url_block(
         cls,
@@ -507,10 +528,10 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
 
     @classmethod
     def get_closed_response(cls, menu_url: str, next_opening: str) -> str:
-        """Get a natural, varied closed-restaurant response."""
-        return random.choice(cls._CLOSED_RESPONSES).format(
-            next_opening=next_opening,
-            menu_url=menu_url,
+        """Get a deterministic and cordial closed-restaurant response."""
+        return cls.RESTAURANT_CLOSED_TEMPLATE.format(
+            next_opening=next_opening or "Consulte nossos horários de funcionamento.",
+            menu_url=menu_url or "Cardápio indisponível no momento.",
         )
 
     # ---------------------------------------------------------------------------
@@ -674,26 +695,28 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
             return "Horário não informado."
 
         days_pt = {
-            "monday": "Segunda",
-            "tuesday": "Terça",
-            "wednesday": "Quarta",
-            "thursday": "Quinta",
-            "friday": "Sexta",
-            "saturday": "Sábado",
-            "sunday": "Domingo",
+            "monday": "Segunda", "tuesday": "Terça", "wednesday": "Quarta",
+            "thursday": "Quinta", "friday": "Sexta", "saturday": "Sábado", "sunday": "Domingo",
         }
+        day_order = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
         lines = []
-        for day, info in hours.items():
-            day_name = days_pt.get(day.lower(), day)
-            if isinstance(info, dict):
-                if info.get("closed"):
-                    lines.append(f"- {day_name}: Fechado")
-                else:
-                    open_time = info.get("open", "")
-                    close_time = info.get("close", "")
-                    lines.append(f"- {day_name}: {open_time} às {close_time}")
-            elif isinstance(info, str):
+        for day in day_order:
+            info = hours.get(day)
+            if info is None:
+                continue
+            day_name = days_pt.get(day, day)
+            if not isinstance(info, dict):
                 lines.append(f"- {day_name}: {info}")
+                continue
+            if info.get("is_closed"):
+                lines.append(f"- {day_name}: Fechado")
+            elif "periods" in info:
+                slots_str = " / ".join(f"{p[0]} às {p[1]}" for p in info["periods"])
+                lines.append(f"- {day_name}: {slots_str}")
+            else:
+                open_time = info.get("opens_at", "")
+                close_time = info.get("closes_at", "")
+                lines.append(f"- {day_name}: {open_time} às {close_time}")
 
         return "\n".join(lines) if lines else "Horário não informado."
