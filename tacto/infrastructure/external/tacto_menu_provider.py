@@ -382,12 +382,18 @@ class TactoMenuProvider(MenuProvider):
     }
 
     def _extract_opening_hours_dict(self, data: dict) -> dict:
-        """Parse horarioAtendimentoDelivery into structured OpeningHours dict."""
+        """Parse horarioAtendimentoDelivery into structured OpeningHours dict.
+
+        Groups multiple entries per day (e.g. lunch + dinner). Deduplicates
+        identical slots. Sorts chronologically so earliest slot is primary.
+        """
         horarios = data.get("horarioAtendimentoDelivery", [])
         if not horarios:
             return {}
 
-        result: dict[str, dict] = {}
+        slots_by_day: dict[str, list[tuple[str, str]]] = {}
+        closed_days: set[str] = set()
+
         for h in horarios:
             dia_raw = str(h.get("diaDaSemana") or h.get("diaDaSemanaSigla") or h.get("diaSemana") or "")
             abertura = h.get("horarioAbertura", "") or ""
@@ -396,38 +402,56 @@ class TactoMenuProvider(MenuProvider):
             if not dia_raw:
                 continue
 
-            # Normalize: lowercase, remove accents approximation, get first word
             dia_norm = dia_raw.lower().split("-")[0].strip()
             day_en = self._PT_DAY_TO_EN.get(dia_norm)
             if not day_en:
                 continue
 
             if abertura and fechamento:
-                result[day_en] = {
-                    "opens_at": abertura[:5],
-                    "closes_at": fechamento[:5],
-                }
+                slots_by_day.setdefault(day_en, []).append((abertura[:5], fechamento[:5]))
             else:
+                closed_days.add(day_en)
+
+        result: dict[str, dict] = {}
+        for day_en, slots in slots_by_day.items():
+            unique = list(dict.fromkeys(slots))      # dedup, preserve order
+            unique.sort(key=lambda s: s[0])          # sort by open time (HH:MM lexicographic)
+            if len(unique) == 1:
+                result[day_en] = {"opens_at": unique[0][0], "closes_at": unique[0][1]}
+            else:
+                result[day_en] = {"periods": [[s[0], s[1]] for s in unique]}
+
+        for day_en in closed_days:
+            if day_en not in result:
                 result[day_en] = {"is_closed": True}
 
         return result
 
     def _extract_hours_text(self, data: dict) -> str:
-        """Format horarioAtendimentoDelivery into readable text."""
-        horarios = data.get("horarioAtendimentoDelivery", [])
-        if not horarios:
+        """Format horarioAtendimentoDelivery into readable text, grouped by day."""
+        grouped = self._extract_opening_hours_dict(data)
+        if not grouped:
             return ""
 
+        _EN_TO_PT = {
+            "monday": "Segunda-feira", "tuesday": "Terça-feira", "wednesday": "Quarta-feira",
+            "thursday": "Quinta-feira", "friday": "Sexta-feira", "saturday": "Sábado", "sunday": "Domingo",
+        }
+        _ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
         lines = []
-        for h in horarios:
-            dia = h.get("diaDaSemana") or h.get("diaDaSemanaSigla", "")
-            abertura = h.get("horarioAbertura", "")
-            fechamento = h.get("horarioFechamento", "")
-            if dia and abertura and fechamento:
-                # Remove seconds from time strings (17:30:00 → 17:30)
-                abertura = abertura[:5]
-                fechamento = fechamento[:5]
-                lines.append(f"- {dia}: {abertura} às {fechamento}")
+        for day_en in _ORDER:
+            info = grouped.get(day_en)
+            if info is None:
+                continue
+            day_pt = _EN_TO_PT[day_en]
+            if info.get("is_closed"):
+                lines.append(f"- {day_pt}: Fechado")
+            elif "periods" in info:
+                slots_str = " / ".join(f"{p[0]} às {p[1]}" for p in info["periods"])
+                lines.append(f"- {day_pt}: {slots_str}")
+            else:
+                lines.append(f"- {day_pt}: {info.get('opens_at', '')} às {info.get('closes_at', '')}")
 
         return "\n".join(lines)
 
