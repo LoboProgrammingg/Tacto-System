@@ -438,7 +438,7 @@ class ProcessIncomingMessageUseCase:
             instance_key=dto.instance_key,
             phone=dto.clean_phone,
             message=response_text,
-            simulate_typing=True,
+            simulate_typing=False,
         )
 
         if isinstance(send_result, Failure):

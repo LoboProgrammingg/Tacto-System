@@ -75,6 +75,35 @@ class JoinMessageClassifier:
 
         # ── from_me=False ──────────────────────────────────────────────────
         if not from_me:
+            customer_phone = _extract_customer_phone(remote_jid, key, data)
+            if remote_jid and sender and customer_phone and _clean_phone(sender) != customer_phone:
+                logger.info(
+                    "classified_human_operator_sender_mismatch",
+                    instance=instance,
+                    sender=sender,
+                    customer_phone=customer_phone,
+                )
+                return "human_operator"
+
+            # Join sometimes reports manual messages from the restaurant as
+            # fromMe=false with sender=instance phone. Treat those as human
+            # activity even if fromMe is wrong.
+            if sender and await self._phone_cache.is_instance_phone(instance, sender):
+                if remote_jid:
+                    logger.info(
+                        "classified_human_operator_from_instance_sender",
+                        instance=instance,
+                        sender=sender,
+                        customer_phone=_extract_customer_phone(remote_jid, key, data),
+                    )
+                    return "human_operator"
+                logger.info(
+                    "ignored_instance_sender_no_remote_jid",
+                    instance=instance,
+                    sender=sender,
+                )
+                return "ignored"
+
             # Sem remote_jid → não sabemos o cliente → ignorar
             if not remote_jid:
                 logger.debug(
@@ -150,8 +179,8 @@ def _extract_customer_phone(remote_jid: str, key: dict, data: dict) -> str:
         key.get("participant", ""),
         data.get("participant", ""),
     ]:
-        if jid and "@s.whatsapp.net" in jid:
-            return jid.split("@")[0]
+        if jid and ("@s.whatsapp.net" in jid or "@c.us" in jid or str(jid).isdigit()):
+            return _clean_phone(str(jid))
     return ""
 
 
@@ -163,3 +192,8 @@ def _extract_text(message: dict, message_type: str) -> str | None:
         ext = message.get("extendedTextMessage", {})
         return ext.get("text") if isinstance(ext, dict) else None
     return message.get("conversation") or message.get("text") or message.get("body") or None
+
+
+def _clean_phone(value: str) -> str:
+    """Normalize phone/JID values to digits-only phone text when possible."""
+    return "".join(ch for ch in value.split("@", 1)[0] if ch.isdigit())

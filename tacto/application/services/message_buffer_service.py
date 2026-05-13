@@ -122,10 +122,7 @@ class MessageBufferService:
             await asyncio.sleep(backoff)
 
         if not lock_acquired:
-            logger.warning("buffer_lock_failed_processing_immediately", phone=phone)
-            await self._process_immediately(
-                instance_key, phone, text, timestamp, message_id, push_name, process_callback
-            )
+            logger.warning("buffer_lock_failed_skipping_processing", phone=phone)
             return
 
         messages = buffer_result.value if buffer_result.is_success() else []

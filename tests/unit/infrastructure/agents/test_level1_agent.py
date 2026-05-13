@@ -218,6 +218,98 @@ class TestLevel1AgentRAGContext:
         assert "Nunca trate o dia da semana como fixo" in prompt
 
 
+class TestLevel1AgentMenuRepetition:
+    """Test menu link and repetitive-response controls."""
+
+    @pytest.mark.asyncio
+    async def test_first_greeting_does_not_append_menu_link(
+        self,
+        agent_context: AgentContext,
+    ):
+        agent = Level1Agent()
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="Olá, João! Boa noite! 😊")
+
+                result = await agent.process(
+                    message="Boa noite",
+                    context=agent_context,
+                    conversation_history=[],
+                )
+
+        assert isinstance(result, Success)
+        assert "cardapio.teste.com" not in result.value.message
+        assert "menu_url_sent" not in result.value.triggered_actions
+
+    @pytest.mark.asyncio
+    async def test_order_intent_appends_menu_link_once(
+        self,
+        agent_context: AgentContext,
+    ):
+        agent = Level1Agent()
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="Claro, você pode montar seu pedido por lá.")
+
+                result = await agent.process(
+                    message="Quero pedir um açaí",
+                    context=agent_context,
+                    conversation_history=[{"role": "user", "content": "Boa noite"}],
+                )
+
+        assert isinstance(result, Success)
+        assert "cardapio.teste.com" in result.value.message
+        assert "menu_url_sent" in result.value.triggered_actions
+
+    @pytest.mark.asyncio
+    async def test_recent_menu_link_is_not_repeated_for_order_complement(
+        self,
+        agent_context: AgentContext,
+    ):
+        agent = Level1Agent()
+        history = [
+            {"role": "assistant", "content": "Cardápio e pedidos\nhttps://cardapio.teste.com"},
+            {"role": "user", "content": "Quero pedir um açaí"},
+        ]
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="Certo, pode escolher os adicionais por lá.")
+
+                result = await agent.process(
+                    message="com banana e leite em pó",
+                    context=agent_context,
+                    conversation_history=history,
+                )
+
+        assert isinstance(result, Success)
+        assert "cardapio.teste.com" not in result.value.message
+        assert "menu_url_sent" not in result.value.triggered_actions
+
+    @pytest.mark.asyncio
+    async def test_short_acknowledgement_does_not_respond(
+        self,
+        agent_context: AgentContext,
+    ):
+        agent = Level1Agent()
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="Posso ajudar?")
+
+                result = await agent.process(
+                    message="Ok",
+                    context=agent_context,
+                    conversation_history=[{"role": "assistant", "content": "Aqui está."}],
+                )
+
+        assert isinstance(result, Success)
+        assert result.value.should_send is False
+        mock_chain.ainvoke.assert_not_called()
+
+
 class TestLevel1AgentInitialization:
     """Test agent initialization."""
 

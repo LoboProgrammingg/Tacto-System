@@ -263,14 +263,34 @@ class Level1Agent(BaseAgent):
                 elif role == "assistant":
                     history.append(AIMessage(content=content))
 
+            if _is_short_acknowledgement(message) and conversation_history:
+                log.info("short_acknowledgement_no_response", message=message[:20])
+                return Ok(
+                    AgentResponse(
+                        message="",
+                        should_send=False,
+                        metadata={
+                            "customer_name": customer_name,
+                            "restaurant_name": context.restaurant_name,
+                        },
+                        tokens_used=0,
+                        processing_time_ms=int((time.time() - start_time) * 1000),
+                        triggered_actions=[],
+                    )
+                )
+
             is_first_message = len(conversation_history) == 0
-            if is_first_message or Level1Prompts.should_send_menu(message):
+            recent_menu_sent = _history_recently_sent_menu(conversation_history, context.menu_url)
+            explicit_menu_request = _is_explicit_menu_request(message)
+            if Level1Prompts.should_send_menu(message) and (explicit_menu_request or not recent_menu_sent):
                 triggered_actions.append("menu_url_sent")
                 log.info(
                     "Menu trigger detected",
                     message=message[:50],
-                    reason="first_message" if is_first_message else "keyword_match",
+                    reason="explicit_request" if explicit_menu_request else "keyword_match",
                 )
+            elif is_first_message:
+                log.debug("first_message_without_menu_link", message=message[:50])
 
             config = RunnableConfig(
                 tags=["level1", f"restaurant:{context.restaurant_id}"],
@@ -302,7 +322,7 @@ class Level1Agent(BaseAgent):
                 if "menu_url_sent" in triggered_actions:
                     should_append = True
                     reason = "keyword_match"
-                elif _response_mentions_menu(response_text):
+                elif _response_mentions_menu(response_text) and not recent_menu_sent:
                     should_append = True
                     reason = "ai_mentioned_menu"
                 else:
@@ -381,3 +401,48 @@ def _response_mentions_menu(text: str) -> bool:
     """Return True if the AI response references the menu/cardápio without the actual URL."""
     text_lower = text.lower()
     return any(indicator in text_lower for indicator in _MENU_RESPONSE_INDICATORS)
+
+
+def _history_recently_sent_menu(conversation_history: list[dict[str, str]], menu_url: str) -> bool:
+    """Return True if the assistant recently sent this menu URL or a menu block."""
+    recent = conversation_history[-8:]
+    for msg in recent:
+        if msg.get("role") != "assistant":
+            continue
+        content = msg.get("content", "").lower()
+        if menu_url and menu_url.lower() in content:
+            return True
+        if "cardápio e pedidos" in content or "cardapio e pedidos" in content:
+            return True
+    return False
+
+
+def _is_explicit_menu_request(message: str) -> bool:
+    """Return True when the user explicitly asks to receive/open the menu link."""
+    text = message.lower()
+    explicit_terms = [
+        "cardápio", "cardapio", "menu", "link",
+    ]
+    return any(term in text for term in explicit_terms)
+
+
+def _is_short_acknowledgement(message: str) -> bool:
+    """Short confirmations should not trigger another AI text."""
+    normalized = message.strip().lower().strip(".!, ")
+    return normalized in {
+        "ok",
+        "okk",
+        "ta",
+        "tá",
+        "tá bom",
+        "ta bom",
+        "sim",
+        "certo",
+        "blz",
+        "beleza",
+        "tranquilo",
+        "obg",
+        "obgd",
+        "obrigado",
+        "obrigada",
+    }

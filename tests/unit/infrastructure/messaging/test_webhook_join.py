@@ -68,9 +68,9 @@ class TestWebhookJoinCustomerMessage:
         join_payload_customer_message: dict,
     ):
         """Customer text messages should be accepted and buffered."""
-        from httpx import AsyncClient
+        from httpx import ASGITransport, AsyncClient
         
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post("/webhook/join/", json=join_payload_customer_message)
         
         assert response.status_code == 200
@@ -119,11 +119,11 @@ class TestWebhookJoinFromMeLogic:
         3. Join API fires webhook with fromMe=true
         4. Webhook checks tracker → message_id or phone found → ignore
         """
-        from httpx import AsyncClient
+        from httpx import ASGITransport, AsyncClient
         
         app.state.redis = mock_redis_with_ai_tracking
         
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post("/webhook/join/", json=join_payload_ai_response)
         
         assert response.status_code == 200
@@ -147,11 +147,11 @@ class TestWebhookJoinFromMeLogic:
         3. Webhook checks tracker → NOT found → human operator detected
         4. AI should be DISABLED for 12 hours
         """
-        from httpx import AsyncClient
+        from httpx import ASGITransport, AsyncClient
         
         app.state.redis = mock_redis_no_ai_tracking
         
-        async with AsyncClient(app=app, base_url="http://test") as ac:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
             response = await ac.post("/webhook/join/", json=join_payload_human_operator)
         
         assert response.status_code == 200
@@ -159,6 +159,75 @@ class TestWebhookJoinFromMeLogic:
         assert data["success"] is True
         # Should indicate operator/paused
         assert "operator" in data["message"].lower() or "paused" in data["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_from_me_false_from_instance_sender_is_human_operator(
+        self,
+        join_payload_customer_message: dict,
+        mock_redis_client: MagicMock,
+    ):
+        """Join can report manual operator messages as fromMe=false with sender=instance phone."""
+        from tacto.infrastructure.messaging.join_message_classifier import JoinMessageClassifier
+
+        payload = join_payload_customer_message
+        payload["sender"] = "556696468999@s.whatsapp.net"
+        payload["data"]["key"]["fromMe"] = False
+        payload["data"]["key"]["remoteJid"] = "558291505525@s.whatsapp.net"
+
+        mock_redis_client.get = AsyncMock(
+            return_value=MagicMock(is_success=lambda: True, value="556696468999")
+        )
+
+        classifier = JoinMessageClassifier(mock_redis_client, None)
+        origin = await classifier.classify(payload, payload["data"], payload["data"]["key"])
+
+        assert origin == "human_operator"
+
+    @pytest.mark.asyncio
+    async def test_from_me_false_sender_mismatch_is_human_operator_without_cache(
+        self,
+        join_payload_customer_message: dict,
+        mock_redis_client: MagicMock,
+    ):
+        """A 1:1 message whose sender differs from remoteJid is not a normal customer message."""
+        from tacto.infrastructure.messaging.join_message_classifier import JoinMessageClassifier
+
+        payload = join_payload_customer_message
+        payload["sender"] = "556696468999@s.whatsapp.net"
+        payload["data"]["key"]["fromMe"] = False
+        payload["data"]["key"]["remoteJid"] = "558291505525@s.whatsapp.net"
+
+        mock_redis_client.get = AsyncMock(
+            return_value=MagicMock(is_success=lambda: True, value=None)
+        )
+
+        classifier = JoinMessageClassifier(mock_redis_client, None)
+        origin = await classifier.classify(payload, payload["data"], payload["data"]["key"])
+
+        assert origin == "human_operator"
+
+    @pytest.mark.asyncio
+    async def test_from_me_false_from_instance_without_remote_jid_is_ignored(
+        self,
+        join_payload_customer_message: dict,
+        mock_redis_client: MagicMock,
+    ):
+        """When customer cannot be identified, do not pause unrelated conversations."""
+        from tacto.infrastructure.messaging.join_message_classifier import JoinMessageClassifier
+
+        payload = join_payload_customer_message
+        payload["sender"] = "556696468999@s.whatsapp.net"
+        payload["data"]["key"]["fromMe"] = False
+        payload["data"]["key"]["remoteJid"] = ""
+
+        mock_redis_client.get = AsyncMock(
+            return_value=MagicMock(is_success=lambda: True, value="556696468999")
+        )
+
+        classifier = JoinMessageClassifier(mock_redis_client, None)
+        origin = await classifier.classify(payload, payload["data"], payload["data"]["key"])
+
+        assert origin == "ignored"
 
 
 class TestWebhookJoinPayloadStructure:
@@ -264,6 +333,7 @@ class TestSentMessageTracker:
             instance_key="restaurante_teste",
             phone="5565992540370",
             message_id="AI_MSG_123",
+            message_text="Olá! Bem-vindo ao restaurante.",
         )
         
         # Verify set was called for both message_id and phone
@@ -293,11 +363,11 @@ class TestSentMessageTracker:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_ai_message_detected_by_phone(
+    async def test_ai_message_detected_by_hash(
         self,
         mock_redis_client: MagicMock,
     ):
-        """AI message should be detected by phone in Redis (echo tracker)."""
+        """AI message should be detected by phone + content hash in Redis."""
         from tacto.infrastructure.messaging.sent_message_tracker import SentMessageTracker
         
         # First call for message_id returns False, second for phone returns True
@@ -314,6 +384,7 @@ class TestSentMessageTracker:
             instance_key="restaurante_teste",
             message_id="UNKNOWN_MSG",
             phone="5565992540370",
+            echo_text="Olá! Bem-vindo ao restaurante.",
         )
         
         assert result is True
