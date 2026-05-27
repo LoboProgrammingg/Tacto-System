@@ -29,13 +29,17 @@ class CreateRestaurantDTO:
 
 @dataclass(frozen=True, slots=True)
 class UpdateRestaurantDTO:
-    """DTO for updating an existing restaurant."""
+    """DTO for updating an existing restaurant.
+
+    All fields optional — only fields set to a non-None value are applied.
+    """
 
     name: Optional[str] = None
     prompt_default: Optional[str] = None
     menu_url: Optional[str] = None
     opening_hours: Optional[dict[str, Any]] = None
     automation_type: Optional[int] = None
+    integration_type: Optional[int] = None
     timezone: Optional[str] = None
     is_active: Optional[bool] = None
     agent_config: Optional[dict[str, Any]] = None

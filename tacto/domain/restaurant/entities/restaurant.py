@@ -142,6 +142,45 @@ class Restaurant:
         self.opening_hours = new_hours
         self._touch()
 
+    def rename(self, new_name: str) -> None:
+        """Rename the restaurant. Enforces 3-char minimum."""
+        candidate = new_name.strip()
+        if len(candidate) < 3:
+            raise ValidationError(
+                message="Restaurant name must be at least 3 characters",
+                field="name",
+                value=new_name,
+            )
+        self.name = candidate
+        self._touch()
+
+    def update_menu_url(self, new_url: str) -> None:
+        """Update menu URL. Enforces http/https scheme."""
+        candidate = new_url.strip()
+        if not candidate:
+            raise ValidationError(
+                message="Menu URL cannot be empty",
+                field="menu_url",
+            )
+        if not candidate.startswith(("http://", "https://")):
+            raise ValidationError(
+                message="Menu URL must be a valid HTTP/HTTPS URL",
+                field="menu_url",
+                value=new_url,
+            )
+        self.menu_url = candidate
+        self._touch()
+
+    def change_automation_type(self, new_type: AutomationType) -> None:
+        """Change automation level. Allows up/down — admin operation."""
+        self.automation_type = new_type
+        self._touch()
+
+    def change_integration_type(self, new_type: IntegrationType) -> None:
+        """Change integration type. Admin operation."""
+        self.integration_type = new_type
+        self._touch()
+
     def upgrade_automation(self, new_type: AutomationType) -> None:
         """Upgrade automation level."""
         if new_type.value < self.automation_type.value:

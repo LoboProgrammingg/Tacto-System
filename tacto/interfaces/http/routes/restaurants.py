@@ -10,8 +10,15 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from tacto.application.dto.restaurant_dto import CreateRestaurantDTO, RestaurantResponseDTO
-from tacto.interfaces.http.dependencies import get_create_restaurant_use_case
+from tacto.application.dto.restaurant_dto import (
+    CreateRestaurantDTO,
+    RestaurantResponseDTO,
+    UpdateRestaurantDTO,
+)
+from tacto.interfaces.http.dependencies import (
+    get_create_restaurant_use_case,
+    get_update_restaurant_use_case,
+)
 from tacto.interfaces.http.schemas.restaurant import (
     CreateRestaurantRequest,
     RestaurantListResponse,
@@ -19,6 +26,7 @@ from tacto.interfaces.http.schemas.restaurant import (
     TactoMenuItemResponse,
     TactoRestaurantDataResponse,
     TactoSyncResponse,
+    UpdateRestaurantRequest,
 )
 
 
@@ -159,6 +167,57 @@ async def get_restaurant(restaurant_id: UUID) -> RestaurantResponse:
         canal_master_id=r.canal_master_id,
         empresa_base_id=r.empresa_base_id,
         is_active=r.is_active,
+    )
+
+
+@router.patch(
+    "/{restaurant_id}",
+    response_model=RestaurantResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update Restaurant",
+    description="Partial update of a restaurant. Only provided fields are applied.",
+)
+async def update_restaurant(
+    restaurant_id: UUID,
+    request: UpdateRestaurantRequest,
+    use_case=Depends(get_update_restaurant_use_case),
+) -> RestaurantResponse:
+    """Apply a partial update to a restaurant."""
+    dto = UpdateRestaurantDTO(
+        name=request.name,
+        menu_url=request.menu_url,
+        prompt_default=request.prompt_default,
+        automation_type=request.automation_type,
+        integration_type=request.integration_type,
+        is_active=request.is_active,
+        agent_config=request.agent_config.model_dump(exclude_none=True)
+        if request.agent_config is not None
+        else None,
+    )
+
+    result = await use_case.execute(restaurant_id, dto)
+
+    if result.is_failure():
+        error_msg = str(result.error)
+        logger.error("update_restaurant_failed", restaurant_id=str(restaurant_id), error=error_msg)
+        if "not found" in error_msg.lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=error_msg)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
+
+    r = result.value
+    return RestaurantResponse(
+        id=r.id,
+        name=r.name,
+        prompt_default=r.prompt_default,
+        menu_url=r.menu_url,
+        opening_hours=r.opening_hours,
+        integration_type=r.integration_type,
+        automation_type=r.automation_type,
+        chave_grupo_empresarial=r.chave_grupo_empresarial,
+        canal_master_id=r.canal_master_id,
+        empresa_base_id=r.empresa_base_id,
+        is_active=r.is_active,
+        agent_config=r.agent_config or {},
     )
 
 

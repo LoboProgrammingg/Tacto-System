@@ -9,6 +9,7 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tacto.application.use_cases.create_restaurant import CreateRestaurantUseCase
+from tacto.application.use_cases.update_restaurant import UpdateRestaurantUseCase
 from tacto.application.use_cases.process_incoming_message import (
     ProcessIncomingMessageUseCase,
 )
@@ -45,6 +46,13 @@ async def get_create_restaurant_use_case() -> AsyncGenerator[CreateRestaurantUse
     async with get_async_session() as session:
         repository = PostgresRestaurantRepository(session)
         yield CreateRestaurantUseCase(repository)
+
+
+async def get_update_restaurant_use_case() -> AsyncGenerator[UpdateRestaurantUseCase, None]:
+    """Get UpdateRestaurantUseCase with a live session."""
+    async with get_async_session() as session:
+        repository = PostgresRestaurantRepository(session)
+        yield UpdateRestaurantUseCase(repository)
 
 
 async def create_and_execute_process_message(

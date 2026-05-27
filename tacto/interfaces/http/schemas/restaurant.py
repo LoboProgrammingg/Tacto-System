@@ -64,6 +64,31 @@ class CreateRestaurantRequest(BaseModel):
     )
 
 
+class UpdateRestaurantRequest(BaseModel):
+    """Request body for partial restaurant update.
+
+    All fields optional. Only provided (non-null) fields are applied.
+    `opening_hours` and `canal_master_id` are intentionally NOT here:
+      - opening_hours is owned by the Tacto external sync
+      - canal_master_id is managed by the Join webhook connect flow
+    """
+
+    name: Optional[str] = Field(default=None, min_length=3, max_length=255)
+    menu_url: Optional[str] = Field(
+        default=None,
+        pattern=r"^https?://",
+        description="URL do Webgula para pedidos",
+    )
+    prompt_default: Optional[str] = Field(default=None)
+    automation_type: Optional[int] = Field(default=None, ge=1, le=3)
+    integration_type: Optional[int] = Field(default=None, ge=1, le=2)
+    is_active: Optional[bool] = Field(default=None)
+    agent_config: Optional[AgentPersonaConfigSchema] = Field(
+        default=None,
+        description="Configurações de persona. Envie objeto vazio {} para limpar todos os overrides.",
+    )
+
+
 class RestaurantResponse(BaseModel):
     """Response model for restaurant."""
 
