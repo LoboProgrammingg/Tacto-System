@@ -24,6 +24,7 @@ class JoinInstance:
 
     instance_key: str
     status: str
+    name: Optional[str] = None
     phone_number: Optional[str] = None
     webhook_url: Optional[str] = None
     is_connected: bool = False
@@ -100,9 +101,12 @@ class JoinInstanceManager:
         }
         """
         status = item.get("status", "unknown")
+        nome = item.get("nome", "")
+        token = item.get("token_instancia", nome)
         return JoinInstance(
-            instance_key=item.get("token_instancia", item.get("nome", "")),
+            instance_key=token,
             status=status,
+            name=nome or token,
             phone_number=item.get("numero_conectado", item.get("numero")),
             webhook_url=item.get("webhookUrl"),
             is_connected=status == "open",

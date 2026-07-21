@@ -27,6 +27,7 @@ router = APIRouter()
 def _to_response(instance) -> InstanceResponse:
     return InstanceResponse(
         instance_key=instance.instance_key,
+        name=getattr(instance, "name", None),
         status=instance.status,
         phone_number=instance.phone_number,
         webhook_url=instance.webhook_url,

@@ -1,61 +1,49 @@
 {
   "info": {
-    "_postman_id": "tactoflow-api-collection",
-    "name": "TactoFlow API",
-    "description": "Coleção completa da API TactoFlow — Sistema de automação de WhatsApp com IA para restaurantes.\n\n## Ambientes\nUse as variáveis de ambiente para alternar entre local e produção.\n\n## Prefixo base\nTodos os endpoints ficam sob `/api/v1`.\n\n## Fluxo recomendado\n1. `POST /restaurants/` — criar restaurante\n2. `POST /restaurants/{id}/tacto-sync` — sincronizar menu (gera embeddings)\n3. `POST /instances/` — criar instância WhatsApp\n4. `GET /instances/{key}/qrcode` — escanear QR Code\n5. `POST /instances/webhook` — configurar webhook\n6. `POST /instances/connect` — vincular instância ao restaurante\n7. `POST /chat/test` — testar IA",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "name": "TactoFlow — Restaurant Management",
+    "description": "Coleção completa para gerenciar restaurantes no TactoFlow.\n\n## Fluxo de onboarding de um novo restaurante:\n1. **[Fluxo Completo]** Execute os 8 passos em ordem\n\nOu use as pastas individuais para operações avulsas.\n\n## Variáveis de coleção\n- `base_url` — URL base da API\n- `join_token` — Token da conta Join Developer\n- `restaurant_id` — Preenchido automaticamente após criar restaurante\n- `instance_key` — Chave da instância Join",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "tactoflow-collection-v2"
   },
   "variable": [
     {
       "key": "base_url",
-      "value": "http://localhost:8000",
-      "description": "URL base. Troque para {{base_url_prod}} ao testar produção.",
-      "type": "string"
+      "value": "http://65.21.240.57:8000",
+      "type": "string",
+      "description": "URL base da API TactoFlow"
     },
     {
-      "key": "base_url_prod",
-      "value": "https://65.21.240.57",
-      "description": "Produção — Hetzner VPS. Trocar para https://tacto.pub após configurar DNS.",
-      "type": "string"
-    },
-    {
-      "key": "api_v1",
-      "value": "{{base_url}}/api/v1",
-      "description": "Prefixo completo da API v1.",
-      "type": "string"
+      "key": "join_token",
+      "value": "2221f6c4-c045-45cb-a745-aa494c761fba",
+      "type": "string",
+      "description": "Token da conta Join Developer"
     },
     {
       "key": "restaurant_id",
       "value": "",
-      "description": "UUID do restaurante. Preenchido automaticamente após criar um restaurante.",
-      "type": "string"
+      "type": "string",
+      "description": "ID do restaurante (UUID) — preenchido automaticamente após POST /restaurants"
     },
     {
       "key": "instance_key",
       "value": "",
-      "description": "Chave da instância WhatsApp. Preenchida automaticamente após criar uma instância.",
-      "type": "string"
+      "type": "string",
+      "description": "Chave da instância Join — preenchida após criar/listar instâncias"
     },
     {
-      "key": "customer_phone",
-      "value": "5511999999999",
-      "description": "Telefone simulado para testes de chat.",
-      "type": "string"
-    },
-    {
-      "key": "webhook_url",
-      "value": "https://65.21.240.57/api/v1/webhook/join/",
-      "description": "URL do webhook que a Join API deve chamar. Atualizar após configurar DNS.",
-      "type": "string"
+      "key": "webhook_base_url",
+      "value": "http://65.21.240.57:8000",
+      "type": "string",
+      "description": "URL base que a Join usará para enviar eventos (deve ser acessível externamente)"
     }
   ],
   "item": [
     {
-      "name": "Restaurants",
-      "description": "Gerenciamento de restaurantes — criação, listagem, sincronização de menu e dados do Tacto.",
+      "name": "🍽️ Restaurantes",
+      "description": "CRUD de restaurantes. Cada restaurante é um tenant isolado com seu próprio canal WhatsApp, configuração de IA e cardápio.",
       "item": [
         {
-          "name": "Create Restaurant",
+          "name": "Criar Restaurante",
           "event": [
             {
               "listen": "test",
@@ -65,9 +53,7 @@
                   "    const body = pm.response.json();",
                   "    pm.collectionVariables.set('restaurant_id', body.id);",
                   "    console.log('restaurant_id salvo:', body.id);",
-                  "    pm.test('Restaurante criado', () => pm.expect(body.id).to.be.a('string'));",
-                  "}",
-                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
+                  "}"
                 ],
                 "type": "text/javascript"
               }
@@ -80,167 +66,92 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Pizzaria da Praça\",\n  \"menu_url\": \"https://webgula.com.br/mt-rosario-pizzariadapraca/delivery\",\n  \"chave_grupo_empresarial\": \"73b9b99f-c648-4810-811e-1e284429dc6c\",\n  \"canal_master_id\": \"wp-empresa-7\",\n  \"empresa_base_id\": \"1\",\n  \"integration_type\": 2,\n  \"automation_type\": 1\n}",
+              "raw": "{\n  \"name\": \"Nome do Restaurante\",\n  \"menu_url\": \"https://v2.webgula.com.br/xxx/cardapio?mode=dine-in\",\n  \"chave_grupo_empresarial\": \"00000000-0000-0000-0000-000000000000\",\n  \"canal_master_id\": \"{{instance_key}}\",\n  \"empresa_base_id\": \"0000\",\n  \"integration_type\": 2,\n  \"automation_type\": 1,\n  \"opening_hours\": {\n    \"monday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}],\n    \"tuesday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}],\n    \"wednesday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}],\n    \"thursday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}],\n    \"friday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}],\n    \"saturday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}],\n    \"sunday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}]\n  }\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{api_v1}}/restaurants/",
-              "host": ["{{api_v1}}"],
+              "raw": "{{base_url}}/restaurants/",
+              "host": ["{{base_url}}"],
               "path": ["restaurants", ""]
             },
-            "description": "Cria um novo restaurante.\n\n**integration_type:** `1` = básica, `2` = completa\n\n**automation_type:** `1` = nível 1 (conversacional), `2` = nível 2, `3` = completo\n\n**opening_hours:** não precisa ser enviado — será preenchido automaticamente ao executar `POST /restaurants/{id}/tacto-sync`, que busca os horários diretamente da API Tacto e salva no banco.\n\n**Após criar:** o `restaurant_id` é salvo automaticamente na variável de coleção."
+            "description": "Cria um novo restaurante.\n\n**Campos obrigatórios:**\n- `name` — Nome do restaurante\n- `menu_url` — URL do cardápio (deve começar com https://)\n- `chave_grupo_empresarial` — UUID do grupo empresarial na Tacto Nuvem\n- `canal_master_id` — Chave da instância Join (idêntico ao instance_key)\n- `empresa_base_id` — ID da empresa na Tacto Nuvem\n\n**integration_type:** 1=manual, 2=Tacto Nuvem\n**automation_type:** 1=Level1 (informativo), 2=Level2 (transacional)\n\n`opening_hours` pode ser omitido se usar tacto-sync depois. Para IA 24h, informe todos os dias 00:00–23:59.\n\nO `restaurant_id` é salvo automaticamente na variável de coleção."
           }
         },
         {
-          "name": "List Restaurants",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Retorna lista', () => pm.expect(body.items).to.be.an('array'));",
-                  "if (body.items.length > 0 && !pm.collectionVariables.get('restaurant_id')) {",
-                  "    pm.collectionVariables.set('restaurant_id', body.items[0].id);",
-                  "    console.log('restaurant_id preenchido com o primeiro item:', body.items[0].id);",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "Listar Restaurantes",
           "request": {
             "method": "GET",
-            "header": [],
             "url": {
-              "raw": "{{api_v1}}/restaurants/",
-              "host": ["{{api_v1}}"],
+              "raw": "{{base_url}}/restaurants/",
+              "host": ["{{base_url}}"],
               "path": ["restaurants", ""]
             },
-            "description": "Lista todos os restaurantes ativos. Preenche `restaurant_id` automaticamente se estiver vazio."
+            "description": "Retorna todos os restaurantes ativos. Use para verificar restaurant_id, canal_master_id e status."
           }
         },
         {
-          "name": "Get Restaurant",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('ID correto', () => pm.expect(body.id).to.eql(pm.collectionVariables.get('restaurant_id')));"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "Buscar Restaurante por ID",
           "request": {
             "method": "GET",
-            "header": [],
             "url": {
-              "raw": "{{api_v1}}/restaurants/{{restaurant_id}}",
-              "host": ["{{api_v1}}"],
+              "raw": "{{base_url}}/restaurants/{{restaurant_id}}",
+              "host": ["{{base_url}}"],
               "path": ["restaurants", "{{restaurant_id}}"]
             },
-            "description": "Busca um restaurante pelo UUID.\n\nUsa a variável `{{restaurant_id}}`."
+            "description": "Retorna dados completos de um restaurante pelo UUID."
           }
         },
         {
-          "name": "Sync Tacto Menu (Embeddings)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('items_synced > 0', () => pm.expect(body.items_synced).to.be.above(0));",
-                  "console.log('Itens sincronizados:', body.items_synced, '| Categorias:', body.categories?.join(', '));"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "Sincronizar Cardápio Tacto (RAG)",
           "request": {
             "method": "POST",
-            "header": [],
             "url": {
-              "raw": "{{api_v1}}/restaurants/{{restaurant_id}}/tacto-sync",
-              "host": ["{{api_v1}}"],
+              "raw": "{{base_url}}/restaurants/{{restaurant_id}}/tacto-sync",
+              "host": ["{{base_url}}"],
               "path": ["restaurants", "{{restaurant_id}}", "tacto-sync"]
             },
-            "description": "Busca o cardápio na API Tacto, gera embeddings com Gemini e salva no pgvector.\n\n**Execute:** após criar o restaurante e sempre que o cardápio mudar."
+            "description": "Busca o cardápio na Tacto Nuvem API, gera embeddings (Gemini) de cada item e salva no pgvector.\n\nExecute:\n- Uma vez após criar o restaurante (se usar integração Tacto)\n- Sempre que o cardápio mudar no ERP\n\nTambém preenche opening_hours com os horários da Tacto.\n\n**Pré-requisito:** restaurante deve ter chave_grupo_empresarial e empresa_base_id válidos."
           }
         },
         {
-          "name": "Fetch Tacto Data",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "console.log('Cached:', body.cached, '| Total items:', body.total_items);"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "Preview Dados Tacto (sem salvar embeddings)",
           "request": {
             "method": "GET",
-            "header": [],
             "url": {
-              "raw": "{{api_v1}}/restaurants/{{restaurant_id}}/tacto-data?force_refresh=false",
-              "host": ["{{api_v1}}"],
+              "raw": "{{base_url}}/restaurants/{{restaurant_id}}/tacto-data?force_refresh=false",
+              "host": ["{{base_url}}"],
               "path": ["restaurants", "{{restaurant_id}}", "tacto-data"],
               "query": [
                 {
                   "key": "force_refresh",
                   "value": "false",
-                  "description": "true = ignora cache Redis e busca dados frescos da Tacto"
+                  "description": "true = ignora cache Redis e busca direto na Tacto"
                 }
               ]
             },
-            "description": "Retorna cardápio + dados institucionais do restaurante via API Tacto.\n\nResultado é cacheado no Redis por 1h. Use `force_refresh=true` para forçar atualização."
+            "description": "Busca e exibe os dados do restaurante na Tacto Nuvem SEM salvar embeddings. Útil para verificar se está puxando o restaurante correto antes de sincronizar.\n\nResultados ficam em cache Redis por 1 hora. Use force_refresh=true para invalidar."
           }
         },
         {
-          "name": "Delete Restaurant",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 204', () => pm.response.to.have.status(204));",
-                  "pm.collectionVariables.set('restaurant_id', '');",
-                  "console.log('restaurant_id limpo.');"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "Deletar Restaurante",
           "request": {
             "method": "DELETE",
-            "header": [],
             "url": {
-              "raw": "{{api_v1}}/restaurants/{{restaurant_id}}",
-              "host": ["{{api_v1}}"],
+              "raw": "{{base_url}}/restaurants/{{restaurant_id}}",
+              "host": ["{{base_url}}"],
               "path": ["restaurants", "{{restaurant_id}}"]
             },
-            "description": "Soft delete do restaurante. Limpa `restaurant_id` da coleção após deletar."
+            "description": "Soft delete do restaurante (marca como inativo)."
           }
         }
       ]
     },
     {
-      "name": "Instances",
-      "description": "Gerenciamento de instâncias WhatsApp via Join Developer API.",
+      "name": "📱 Instâncias WhatsApp (Join)",
+      "description": "Gerenciamento de instâncias WhatsApp via Join Developer API. Cada restaurante precisa de uma instância conectada.",
       "item": [
         {
-          "name": "Create Instance",
+          "name": "Criar Instância",
           "event": [
             {
               "listen": "test",
@@ -250,46 +161,6 @@
                   "    const body = pm.response.json();",
                   "    pm.collectionVariables.set('instance_key', body.instance_key);",
                   "    console.log('instance_key salvo:', body.instance_key);",
-                  "    pm.test('Instância criada', () => pm.expect(body.instance_key).to.be.a('string'));",
-                  "}",
-                  "pm.test('Status 201', () => pm.response.to.have.status(201));"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"instance_name\": \"restaurante-exemplo-01\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{api_v1}}/instances/",
-              "host": ["{{api_v1}}"],
-              "path": ["instances", ""]
-            },
-            "description": "Cria uma nova instância WhatsApp na Join API.\n\nO `instance_key` retornado é salvo automaticamente na variável de coleção."
-          }
-        },
-        {
-          "name": "List Instances",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Retorna lista', () => pm.expect(body.instances).to.be.an('array'));",
-                  "console.log('Total de instâncias:', body.total);",
-                  "if (body.instances.length > 0 && !pm.collectionVariables.get('instance_key')) {",
-                  "    pm.collectionVariables.set('instance_key', body.instances[0].instance_key);",
-                  "    console.log('instance_key preenchido:', body.instances[0].instance_key);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -297,119 +168,61 @@
             }
           ],
           "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{api_v1}}/instances/",
-              "host": ["{{api_v1}}"],
-              "path": ["instances", ""]
-            },
-            "description": "Lista todas as instâncias WhatsApp cadastradas na Join API."
-          }
-        },
-        {
-          "name": "Get Instance Status",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "console.log('Status da instância:', body.status, '| Conectada:', body.is_connected);"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{api_v1}}/instances/{{instance_key}}/status",
-              "host": ["{{api_v1}}"],
-              "path": ["instances", "{{instance_key}}", "status"]
-            },
-            "description": "Retorna o status atual de uma instância WhatsApp."
-          }
-        },
-        {
-          "name": "Get QR Code",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('QR code presente', () => pm.expect(body.qr_code).to.be.a('string'));",
-                  "console.log('QR expira em (s):', body.expires_in);"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{api_v1}}/instances/{{instance_key}}/qrcode",
-              "host": ["{{api_v1}}"],
-              "path": ["instances", "{{instance_key}}", "qrcode"]
-            },
-            "description": "Retorna o QR Code para conectar o WhatsApp à instância.\n\nO QR expira em ~60 segundos. Escaneie com o WhatsApp do restaurante."
-          }
-        },
-        {
-          "name": "Configure Webhook",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Sucesso', () => pm.expect(body.success).to.be.true);",
-                  "console.log('Webhook configurado:', body.webhook_url);"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"instance_key\": \"{{instance_key}}\",\n  \"webhook_url\": \"{{webhook_url}}\",\n  \"events\": [\n    \"messages.upsert\"\n  ]\n}",
+              "raw": "{\n  \"instance_name\": \"tactoflow-restaurante-novo\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{api_v1}}/instances/webhook",
-              "host": ["{{api_v1}}"],
-              "path": ["instances", "webhook"]
+              "raw": "{{base_url}}/instances/",
+              "host": ["{{base_url}}"],
+              "path": ["instances", ""]
             },
-            "description": "Configura a URL de webhook na Join API para receber eventos WhatsApp.\n\nA URL deve ser HTTPS e acessível publicamente.\n\n**Evento obrigatório:** `messages.upsert`"
+            "description": "Cria uma nova instância WhatsApp na Join.\n\n**Convenção de nome:** `tactoflow-{nome-restaurante}` (sem espaços, sem acentos, minúsculas com hífens)\n\nO instance_key é salvo automaticamente na variável de coleção."
           }
         },
         {
-          "name": "Connect Instance to Restaurant",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Vinculado com sucesso', () => pm.expect(body.success).to.be.true);",
-                  "console.log('Instância', body.instance_key, 'vinculada ao restaurante:', body.restaurant_name);"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "Listar Instâncias",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/instances/",
+              "host": ["{{base_url}}"],
+              "path": ["instances", ""]
+            },
+            "description": "Lista todas as instâncias Join da conta. Retorna status, número conectado e webhook configurado."
+          }
+        },
+        {
+          "name": "Status da Instância",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/instances/{{instance_key}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["instances", "{{instance_key}}", "status"]
+            },
+            "description": "Retorna o status atual. Verifique is_connected=true antes de processar mensagens."
+          }
+        },
+        {
+          "name": "Obter QR Code",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/instances/{{instance_key}}/qrcode",
+              "host": ["{{base_url}}"],
+              "path": ["instances", "{{instance_key}}", "qrcode"]
+            },
+            "description": "Retorna o QR Code em base64 para conectar o WhatsApp.\n\n**Como usar:**\n1. Copie o valor de `qr_code`\n2. Decodifique em https://base64.guru/converter/decode/image\n3. Escaneie com o celular do restaurante\n\nO QR expira em ~60s. Se expirar, chame novamente."
+          }
+        },
+        {
+          "name": "Conectar Instância ao Restaurante",
           "request": {
             "method": "POST",
             "header": [
@@ -421,90 +234,65 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{api_v1}}/instances/connect",
-              "host": ["{{api_v1}}"],
+              "raw": "{{base_url}}/instances/connect",
+              "host": ["{{base_url}}"],
               "path": ["instances", "connect"]
             },
-            "description": "Vincula a instância WhatsApp a um restaurante.\n\nIsso habilita o roteamento multi-tenant: mensagens recebidas nessa instância serão processadas pelo AI do restaurante vinculado.\n\n**Nota:** o campo no body é `instancia` (alias da API)."
+            "description": "Associa instância ao restaurante para roteamento de webhooks.\n\nAtualiza o canal_master_id no banco. Toda mensagem recebida nessa instância é roteada para a IA desse restaurante.\n\n**Atenção:** O campo se chama `instancia` (alias do Pydantic para instance_key)."
           }
         },
         {
-          "name": "Logout Instance",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Logout OK', () => pm.expect(body.success).to.be.true);"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "Configurar Webhook (via TactoFlow API)",
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instance_key\": \"{{instance_key}}\",\n  \"webhook_url\": \"{{webhook_base_url}}/webhook/join/\",\n  \"events\": [\"messages.upsert\", \"send.message\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
             "url": {
-              "raw": "{{api_v1}}/instances/{{instance_key}}/logout",
-              "host": ["{{api_v1}}"],
+              "raw": "{{base_url}}/instances/webhook",
+              "host": ["{{base_url}}"],
+              "path": ["instances", "webhook"]
+            },
+            "description": "Configura o webhook na Join para que ela envie eventos para o TactoFlow.\n\nEventos necessários:\n- `messages.upsert` — mensagens recebidas de clientes\n- `send.message` — eco de mensagens enviadas (detecção de operador humano)\n\nwebhook_url deve ser acessível publicamente pela Join."
+          }
+        },
+        {
+          "name": "Logout da Instância",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/instances/{{instance_key}}/logout",
+              "host": ["{{base_url}}"],
               "path": ["instances", "{{instance_key}}", "logout"]
             },
-            "description": "Desconecta o WhatsApp da instância (logout). A instância continua existindo, apenas perde a sessão ativa."
+            "description": "Desconecta o WhatsApp da instância. O número precisará ser reconectado via QR Code."
           }
         },
         {
-          "name": "Delete Instance",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 204', () => pm.response.to.have.status(204));",
-                  "pm.collectionVariables.set('instance_key', '');",
-                  "console.log('instance_key limpo.');"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "Deletar Instância",
           "request": {
             "method": "DELETE",
-            "header": [],
             "url": {
-              "raw": "{{api_v1}}/instances/{{instance_key}}",
-              "host": ["{{api_v1}}"],
+              "raw": "{{base_url}}/instances/{{instance_key}}",
+              "host": ["{{base_url}}"],
               "path": ["instances", "{{instance_key}}"]
             },
-            "description": "Remove permanentemente a instância WhatsApp. Limpa `instance_key` da coleção após deletar."
+            "description": "Remove permanentemente a instância da Join. Ação irreversível."
           }
         }
       ]
     },
     {
-      "name": "Chat (Test AI)",
-      "description": "Endpoint para testar o agente de IA diretamente, sem envio de WhatsApp.",
+      "name": "🤖 Chat — Teste da IA",
+      "description": "Teste a IA diretamente sem passar pelo WhatsApp. Conversa persiste entre chamadas com o mesmo customer_phone.",
       "item": [
         {
-          "name": "Test AI Chat",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Tem resposta', () => pm.expect(body.response).to.be.a('string'));",
-                  "console.log('Restaurante:', body.restaurant_name);",
-                  "console.log('Tempo (ms):', body.processing_time_ms);",
-                  "console.log('Resposta IA:', body.response);",
-                  "console.log('Histórico:', body.history?.length, 'mensagens');"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "Enviar Mensagem para IA",
           "request": {
             "method": "POST",
             "header": [
@@ -512,141 +300,247 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"restaurant_id\": \"{{restaurant_id}}\",\n  \"message\": \"Oi, qual é o horário de funcionamento?\",\n  \"customer_phone\": \"{{customer_phone}}\",\n  \"customer_name\": \"Cliente Teste\"\n}",
+              "raw": "{\n  \"restaurant_id\": \"{{restaurant_id}}\",\n  \"customer_phone\": \"5565999990000\",\n  \"customer_name\": \"Cliente Teste\",\n  \"message\": \"Olá, quais são os horários de funcionamento?\"\n}",
               "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{api_v1}}/chat/test",
-              "host": ["{{api_v1}}"],
+              "raw": "{{base_url}}/chat/test",
+              "host": ["{{base_url}}"],
               "path": ["chat", "test"]
             },
-            "description": "Envia uma mensagem diretamente ao agente de IA e retorna a resposta.\n\nNenhuma mensagem é enviada ao WhatsApp — uso exclusivo para testes.\n\nO contexto de conversa é mantido entre chamadas com o mesmo `customer_phone`. Para iniciar uma nova conversa, troque o número.\n\n**Dicas de teste:**\n- Pergunte sobre horários, cardápio, pedidos\n- Mande múltiplas mensagens sequenciais para testar o histórico\n- Veja o `processing_time_ms` para avaliar latência"
+            "description": "Envia uma mensagem diretamente para a IA e recebe a resposta.\n\nNenhuma mensagem WhatsApp é enviada — apenas para testes internos.\n\nO histórico da conversa persiste (PostgreSQL + Redis). Use o mesmo customer_phone para continuar uma conversa.\n\n**Dica:** Use um telefone fictício (ex: 5565999990000) para não misturar com conversas reais."
           }
         }
       ]
     },
     {
-      "name": "Webhook",
-      "description": "Recebimento de eventos WhatsApp via Join Developer API. Em produção, chamado automaticamente pela Join.",
-      "item": [
-        {
-          "name": "Join Webhook — messages.upsert",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Accepted', () => pm.expect(body.success).to.be.true);",
-                  "console.log('Webhook response:', body.message);"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              {
-                "key": "X-Hub-Signature-256",
-                "value": "sha256=ASSINATURA_HMAC_SHA256",
-                "description": "Obrigatório se JOIN_WEBHOOK_SECRET estiver configurado no .env. Gerado pela Join API automaticamente.",
-                "disabled": true
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"{{instance_key}}\",\n  \"data\": {\n    \"key\": {\n      \"remoteJid\": \"5511999999999@s.whatsapp.net\",\n      \"fromMe\": false,\n      \"id\": \"MSG_ID_EXEMPLO_001\"\n    },\n    \"message\": {\n      \"conversation\": \"Olá! Quero fazer um pedido.\"\n    },\n    \"pushName\": \"Cliente Teste\",\n    \"messageTimestamp\": 1711900000\n  },\n  \"sender\": \"5511999999999@s.whatsapp.net\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{api_v1}}/webhook/join/",
-              "host": ["{{api_v1}}"],
-              "path": ["webhook", "join", ""]
-            },
-            "description": "Recebe eventos da Join Developer API.\n\n**Em produção:** chamado automaticamente. Use aqui apenas para simular mensagens recebidas.\n\n**Comportamento:**\n- Retorna 200 imediatamente (processamento em background)\n- Ignora eventos que não sejam `messages.upsert`\n- Ignora mensagens de grupos (`@g.us`)\n- Bufferiza mensagens por 5s (janela de consolidação)\n- Valida HMAC-SHA256 se `JOIN_WEBHOOK_SECRET` estiver configurado\n\n**fromMe:** `false` = mensagem do cliente, `true` = operador humano (AI pausada)"
-          }
-        },
-        {
-          "name": "Join Webhook — fromMe (operador humano)",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"{{instance_key}}\",\n  \"data\": {\n    \"key\": {\n      \"remoteJid\": \"5511999999999@s.whatsapp.net\",\n      \"fromMe\": true,\n      \"id\": \"MSG_ID_OPERADOR_001\"\n    },\n    \"message\": {\n      \"conversation\": \"Olá! Já estamos preparando seu pedido.\"\n    },\n    \"pushName\": \"Atendente\",\n    \"messageTimestamp\": 1711900010\n  },\n  \"sender\": \"5511999999999@s.whatsapp.net\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{api_v1}}/webhook/join/",
-              "host": ["{{api_v1}}"],
-              "path": ["webhook", "join", ""]
-            },
-            "description": "Simula uma mensagem enviada pelo operador humano (`fromMe: true`).\n\nA IA detecta isso e pausa o atendimento automático para essa conversa."
-          }
-        }
-      ]
-    },
-    {
-      "name": "Health",
-      "description": "Endpoints de monitoramento — não precisam de prefixo /api/v1.",
+      "name": "🔧 Utilitários",
+      "description": "Health check, simulação de webhook e operações de diagnóstico.",
       "item": [
         {
           "name": "Health Check",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('API healthy', () => pm.expect(body.status).to.eql('healthy'));",
-                  "console.log('Versão:', body.version);"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
           "request": {
             "method": "GET",
-            "header": [],
             "url": {
               "raw": "{{base_url}}/health",
               "host": ["{{base_url}}"],
               "path": ["health"]
             },
-            "description": "Verifica se a API está respondendo. Usado pelo Docker healthcheck e monitoramento."
+            "description": "Verifica se a API está rodando e os serviços dependentes (PostgreSQL, Redis) estão conectados."
           }
         },
         {
-          "name": "Readiness Check",
+          "name": "Simular Mensagem do Cliente (Webhook)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"{{instance_key}}\",\n  \"sender\": \"5565999990001@s.whatsapp.net\",\n  \"data\": {\n    \"key\": {\n      \"remoteJid\": \"5565999990001@s.whatsapp.net\",\n      \"fromMe\": false,\n      \"id\": \"TEST_MSG_001\"\n    },\n    \"pushName\": \"Cliente Simulado\",\n    \"messageTimestamp\": 1700000000,\n    \"messageType\": \"conversation\",\n    \"message\": {\n      \"conversation\": \"Qual o horário de funcionamento?\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/webhook/join/",
+              "host": ["{{base_url}}"],
+              "path": ["webhook", "join", ""]
+            },
+            "description": "Simula uma mensagem de cliente chegando via webhook Join.\n\n**Importante:** Funciona apenas se JOIN_WEBHOOK_SECRET não estiver configurado (sem validação HMAC).\n\nEsse endpoint é o mesmo que a Join chama — útil para debug do fluxo completo."
+          }
+        },
+        {
+          "name": "Simular Operador Humano (fromMe=True)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"event\": \"messages.upsert\",\n  \"instance\": \"{{instance_key}}\",\n  \"sender\": \"5565000000000@s.whatsapp.net\",\n  \"data\": {\n    \"key\": {\n      \"remoteJid\": \"5565999990001@s.whatsapp.net\",\n      \"fromMe\": true,\n      \"id\": \"OPERATOR_MSG_001\"\n    },\n    \"pushName\": \"Operador\",\n    \"messageTimestamp\": 1700000001,\n    \"messageType\": \"conversation\",\n    \"message\": {\n      \"conversation\": \"Olá, sou o atendente, posso ajudar?\"\n    }\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/webhook/join/",
+              "host": ["{{base_url}}"],
+              "path": ["webhook", "join", ""]
+            },
+            "description": "Simula o operador humano respondendo via WhatsApp (fromMe=True).\n\nSe a mensagem NÃO estiver no SentMessageTracker (não foi enviada pela IA), o sistema vai:\n1. Detectar como operador humano\n2. Desativar a IA por 12h para o número do cliente (remoteJid)\n\nO remoteJid deve ser o número do CLIENTE (não do operador)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "📋 Fluxo Completo — Novo Restaurante",
+      "description": "Execute esses 8 passos em ordem para onboarding completo de um novo restaurante.",
+      "item": [
+        {
+          "name": "1. Criar Instância Join",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('API ready', () => pm.expect(body.status).to.eql('ready'));",
-                  "console.log('Database:', body.checks?.database, '| Redis:', body.checks?.redis);"
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('instance_key', body.instance_key);",
+                  "    console.log('✅ instance_key salvo:', body.instance_key);",
+                  "    console.log('👉 Próximo passo: obter QR Code');",
+                  "}"
                 ],
                 "type": "text/javascript"
               }
             }
           ],
           "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/ready",
-              "host": ["{{base_url}}"],
-              "path": ["ready"]
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instance_name\": \"tactoflow-novo-restaurante\"\n}",
+              "options": { "raw": { "language": "json" } }
             },
-            "description": "Verifica se banco de dados e Redis estão conectados. Retorna status de cada dependência."
+            "url": {
+              "raw": "{{base_url}}/instances/",
+              "host": ["{{base_url}}"],
+              "path": ["instances", ""]
+            },
+            "description": "Cria a instância WhatsApp na Join.\n\nAltere `instance_name` para o nome do restaurante. Convenção: `tactoflow-{nome-sem-acentos}`"
+          }
+        },
+        {
+          "name": "2. Obter QR Code para Conectar WhatsApp",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/instances/{{instance_key}}/qrcode",
+              "host": ["{{base_url}}"],
+              "path": ["instances", "{{instance_key}}", "qrcode"]
+            },
+            "description": "Copie o valor de `qr_code` e decodifique em https://base64.guru/converter/decode/image para visualizar e escanear com o celular do restaurante.\n\nApós escanear, verifique o status com o próximo passo."
+          }
+        },
+        {
+          "name": "3. Verificar Status da Instância",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/instances/{{instance_key}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["instances", "{{instance_key}}", "status"]
+            },
+            "description": "Confirme que `is_connected = true` antes de prosseguir. Se ainda false, aguarde alguns segundos e tente novamente."
+          }
+        },
+        {
+          "name": "4. Criar Restaurante no Banco",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const body = pm.response.json();",
+                  "    pm.collectionVariables.set('restaurant_id', body.id);",
+                  "    console.log('✅ restaurant_id salvo:', body.id);",
+                  "    console.log('👉 Próximo passo: conectar instância ao restaurante');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Nome do Restaurante\",\n  \"menu_url\": \"https://v2.webgula.com.br/xxx/cardapio?mode=dine-in\",\n  \"chave_grupo_empresarial\": \"00000000-0000-0000-0000-000000000000\",\n  \"canal_master_id\": \"{{instance_key}}\",\n  \"empresa_base_id\": \"0000\",\n  \"integration_type\": 2,\n  \"automation_type\": 1,\n  \"opening_hours\": {\n    \"monday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}],\n    \"tuesday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}],\n    \"wednesday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}],\n    \"thursday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}],\n    \"friday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}],\n    \"saturday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}],\n    \"sunday\": [{\"open\": \"00:00\", \"close\": \"23:59\"}]\n  }\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/restaurants/",
+              "host": ["{{base_url}}"],
+              "path": ["restaurants", ""]
+            },
+            "description": "Cadastra o restaurante. Preencha:\n- `name` — Nome do restaurante\n- `menu_url` — URL do cardápio Webgula (obrigatório, deve começar com https://)\n- `chave_grupo_empresarial` — UUID do grupo na Tacto Nuvem\n- `canal_master_id` — já preenchido com {{instance_key}}\n- `empresa_base_id` — ID da empresa na Tacto\n- `opening_hours` — 24h por padrão; ajuste conforme necessidade\n\nSe não usar Tacto: set integration_type=1 e informe horários manualmente."
+          }
+        },
+        {
+          "name": "5. Conectar Instância ao Restaurante",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restaurant_id\": \"{{restaurant_id}}\",\n  \"instancia\": \"{{instance_key}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/instances/connect",
+              "host": ["{{base_url}}"],
+              "path": ["instances", "connect"]
+            },
+            "description": "Vincula a instância Join ao restaurante. Atualiza o canal_master_id no banco. A partir daqui, mensagens recebidas nessa instância são roteadas para a IA desse restaurante."
+          }
+        },
+        {
+          "name": "6. Configurar Webhook na Join",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"instance_key\": \"{{instance_key}}\",\n  \"webhook_url\": \"{{webhook_base_url}}/webhook/join/\",\n  \"events\": [\"messages.upsert\", \"send.message\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/instances/webhook",
+              "host": ["{{base_url}}"],
+              "path": ["instances", "webhook"]
+            },
+            "description": "Registra o webhook na Join para que mensagens sejam enviadas ao TactoFlow.\n\nCertifique-se de que webhook_base_url aponta para o servidor público (produção: http://65.21.240.57:8000)."
+          }
+        },
+        {
+          "name": "7. (Opcional) Sincronizar Cardápio Tacto",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/restaurants/{{restaurant_id}}/tacto-sync",
+              "host": ["{{base_url}}"],
+              "path": ["restaurants", "{{restaurant_id}}", "tacto-sync"]
+            },
+            "description": "Sincroniza cardápio da Tacto Nuvem para o pgvector (RAG).\n\nSkip se:\n- Restaurante não usar integração Tacto (integration_type=1)\n- IA só direciona para o link do cardápio sem RAG"
+          }
+        },
+        {
+          "name": "8. Testar IA",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"restaurant_id\": \"{{restaurant_id}}\",\n  \"customer_phone\": \"5565999990000\",\n  \"customer_name\": \"Teste Final\",\n  \"message\": \"Olá! Vocês estão abertos agora?\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/chat/test",
+              "host": ["{{base_url}}"],
+              "path": ["chat", "test"]
+            },
+            "description": "Testa a IA do restaurante recém-configurado.\n\nVerifique:\n- A IA responde na persona correta?\n- Horários estão corretos?\n- O link do cardápio está correto?\n- A IA NÃO inventa itens do cardápio?"
           }
         }
       ]

@@ -34,3 +34,5 @@ Ele lembra do que o cliente falou antes — tanto na mesma conversa quanto em ac
 ---
 
 **Resumo:** Ele filtra dúvidas, auxilia nos pedidos e humaniza 100% o contato. A equipe só entra quando realmente precisa! 🚀
+
+

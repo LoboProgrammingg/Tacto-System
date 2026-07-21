@@ -34,6 +34,7 @@ class InstanceResponse(BaseModel):
     """Response model for a WhatsApp instance."""
 
     instance_key: str
+    name: Optional[str] = None
     status: str
     phone_number: Optional[str] = None
     webhook_url: Optional[str] = None
