@@ -222,6 +222,7 @@ async def update_restaurant(
         chave_grupo_empresarial=r.chave_grupo_empresarial,
         canal_master_id=r.canal_master_id,
         empresa_base_id=r.empresa_base_id,
+        timezone=r.timezone,
         is_active=r.is_active,
         agent_config=r.agent_config or {},
     )
