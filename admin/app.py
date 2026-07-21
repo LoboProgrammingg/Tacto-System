@@ -444,8 +444,13 @@ def _render_cadastrar(tacto: TactoFlowClient, join: JoinClient) -> None:
                 )
                 attendant_name = st.text_input(
                     "Apelido do atendente",
-                    value="Maria",
-                    help="Como o assistente virtual se apresentará no WhatsApp.",
+                    value="",
+                    placeholder="escolha qualquer nome — vazio usa Maria (fem.) / José (masc.)",
+                    help=(
+                        "Como o assistente se apresentará no WhatsApp. Escolha "
+                        "qualquer nome; se deixar vazio, usa o padrão do gênero "
+                        "escolhido abaixo: Maria (feminino) ou José (masculino)."
+                    ),
                 )
             with col2:
                 menu_url = st.text_input(
@@ -684,6 +689,11 @@ _GENDER_OPTIONS = ["(default plataforma)", "feminino", "masculino", "neutro"]
 _STYLE_OPTIONS = ["(default plataforma)", "formal", "informal"]
 
 
+def _default_attendant_for(persona: dict[str, Any]) -> str:
+    """Gender-based default name shown when the restaurant has no override."""
+    return "José" if persona.get("attendant_gender") == "masculino" else "Maria"
+
+
 def _save_attendant_name(tacto: TactoFlowClient, rid: str, name: str | None) -> None:
     """Update only the attendant name, preserving all other persona overrides.
 
@@ -721,7 +731,7 @@ def _render_attendant_quick_edit(tacto: TactoFlowClient, r: dict[str, Any]) -> N
         st.caption(
             f"Nome atual: **{current_name}**"
             if current_name
-            else "Nome atual: *padrão da plataforma*"
+            else f"Nome atual: *padrão — {_default_attendant_for(persona)}*"
         )
         new_name = st.text_input(
             "Novo nome da atendente",
@@ -974,7 +984,10 @@ def _render_restaurantes(tacto: TactoFlowClient, join: JoinClient, settings: Set
             elif persona.get("attendant_name"):
                 att_html = f'🎙️ Atendente: <b>{persona["attendant_name"]}</b>'
             else:
-                att_html = '🎙️ Atendente: <span class="tacto-muted">padrão da plataforma</span>'
+                att_html = (
+                    f'🎙️ Atendente: <b>{_default_attendant_for(persona)}</b> '
+                    '<span class="tacto-muted">(padrão)</span>'
+                )
             head_cols[0].markdown(
                 f'<div style="margin-top:.15rem">{att_html}</div>',
                 unsafe_allow_html=True,

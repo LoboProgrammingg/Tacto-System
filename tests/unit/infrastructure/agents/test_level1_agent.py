@@ -690,6 +690,50 @@ class TestLevel1AgentMenuResend:
         assert "menu_url_sent" not in result.value.triggered_actions
 
 
+class TestLevel1PromptsGenderedPersona:
+    """Prompt must respect gender and never leave the attendant nameless."""
+
+    def _build(self, name, gender):
+        return Level1Prompts.build_system_prompt(
+            restaurant_name="Restaurante",
+            menu_url="https://cardapio.com",
+            opening_hours={},
+            customer_name="Cliente",
+            rag_context="",
+            tacto_address="",
+            tacto_hours="",
+            custom_prompt=None,
+            attendant_name=name,
+            attendant_gender=gender,
+        )
+
+    def test_masculine_presents_as_male(self):
+        prompt = self._build("José", "masculino")
+        assert "Sou o José" in prompt
+        assert "seu atendente virtual" in prompt
+        assert "sua atendente virtual" not in prompt
+
+    def test_feminine_presents_as_female(self):
+        prompt = self._build("Maria", "feminino")
+        assert "Sou a Maria" in prompt
+        assert "sua atendente virtual" in prompt
+
+    def test_empty_name_masculine_defaults_to_jose(self):
+        prompt = self._build("", "masculino")
+        assert "José" in prompt
+        assert "Sou o José" in prompt
+
+    def test_empty_name_feminine_defaults_to_maria(self):
+        prompt = self._build("", "feminino")
+        assert "Maria" in prompt
+        assert "Sou a Maria" in prompt
+
+    def test_chosen_name_with_masculine_gender_is_respected(self):
+        prompt = self._build("Carlos", "masculino")
+        assert "Sou o Carlos" in prompt
+        assert "seu atendente virtual" in prompt
+
+
 class TestLevel1PromptsAntiInvention:
     """Prompt must forbid inventing delivery/payment/promo info."""
 

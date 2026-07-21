@@ -63,6 +63,43 @@ def test_build_agent_context_includes_restaurant_local_datetime(monkeypatch):
     assert context.current_time_br == "09:30"
     assert context.current_datetime_iso == "2026-05-02T09:30:00-04:00"
     assert context.customer_name == "João"
+    assert context.attendant_name  # persona always resolved, never empty
+
+
+def test_build_agent_context_passes_restaurant_persona(monkeypatch):
+    """The test chat route must use the restaurant persona (name + gender)."""
+    from tacto.domain.restaurant.value_objects.agent_persona import AgentPersonaConfig
+
+    restaurant = Restaurant.create(
+        restaurant_id=RestaurantId.generate(),
+        name="Restaurante Teste",
+        prompt_default="",
+        menu_url="https://cardapio.teste.com",
+        opening_hours=_opening_hours(),
+        integration_type=IntegrationType.JOIN,
+        automation_type=AutomationType.BASIC,
+        chave_grupo_empresarial=uuid4(),
+        canal_master_id="wp-empresa-3",
+        empresa_base_id="3",
+        timezone="America/Cuiaba",
+        agent_config=AgentPersonaConfig(attendant_gender="masculino"),
+    )
+    conversation = Conversation.create(
+        restaurant_id=restaurant.id,
+        customer_phone=PhoneNumber("5565988888888"),
+        customer_name="Ana",
+    )
+    monkeypatch.setattr(restaurant, "is_open_now", lambda: True)
+
+    context = _build_agent_context(
+        restaurant=restaurant,
+        conversation=conversation,
+        customer_phone="5565988888888",
+        customer_name=None,
+    )
+
+    assert context.attendant_gender == "masculino"
+    assert context.attendant_name == "José"
 
 
 def test_build_agent_context_fail_open_when_hours_undefined(monkeypatch):
@@ -91,6 +128,10 @@ def test_build_agent_context_fail_open_when_hours_undefined(monkeypatch):
     class _App:
         bypass_hours_check = False
         default_timezone = "America/Sao_Paulo"
+        attendant_name = "Maria"
+        attendant_gender = "feminino"
+        attendant_persona_style = "formal"
+        attendant_max_emojis = 1
 
     class _Settings:
         app = _App()

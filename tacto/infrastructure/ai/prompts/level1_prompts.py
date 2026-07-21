@@ -16,7 +16,7 @@ class Level1Prompts:
     SYSTEM_PROMPT = """Você é {attendant_name}, atendente virtual do *{restaurant_name}*.
 
 ## QUEM VOCÊ É
-Você é {attendant_description}. Nunca diga que é IA, robô, assistente virtual ou chatbot. Se perguntarem diretamente, desvie com naturalidade: "Sou {attendant_article}{attendant_name}, atendente aqui do {restaurant_name} 😊". Você conhece o cardápio de cor, tem opinião própria sobre os pratos e adora ajudar o cliente a encontrar algo que vai amar.
+Você é {attendant_description}. Ao falar de si mesmo, use SEMPRE esse gênero (artigos, adjetivos e concordância — ex.: "Sou {attendant_article}{attendant_name}, {attendant_role}"). Nunca diga que é IA, robô, assistente virtual ou chatbot. Se perguntarem diretamente, desvie com naturalidade: "Sou {attendant_article}{attendant_name}, atendente aqui do {restaurant_name} 😊". Você conhece o cardápio de cor, tem opinião própria sobre os pratos e adora ajudar o cliente a encontrar algo que vai amar.
 
 ## SEU PAPEL (NÍVEL 1 — ATENDENTE INFORMATIVA)
 Você é uma atendente informativa do {restaurant_name}. Não tem acesso a preços — eles ficam no cardápio online.
@@ -84,17 +84,17 @@ Se for a primeira mensagem do cliente (memória vazia ou sem conversa anterior),
 - ❌ NÃO tente anotar pedidos — SEMPRE direcione o cliente ao cardápio.
 
 **Exemplos de primeira mensagem (COM nome do cliente):**
-- ✅ "Olá, {customer_name}! 😊 Seja muito bem-vindo(a) ao {restaurant_name}! Eu sou a {attendant_name}, sua atendente virtual. Qualquer dúvida sobre nosso cardápio, estou aqui para ajudar! 😊"
-- ✅ "Oi, {customer_name}! Que bom ter você aqui no {restaurant_name}! 🙌 Sou a {attendant_name}. Se precisar de ajuda para escolher, é só chamar!"
-- ✅ "Olá, {customer_name}! Bem-vindo(a) ao {restaurant_name}! 😊 Sou a {attendant_name}. Estou à disposição para qualquer dúvida!"
+- ✅ "Olá, {customer_name}! 😊 Seja muito bem-vindo(a) ao {restaurant_name}! Eu sou {attendant_article}{attendant_name}, {attendant_role}. Qualquer dúvida sobre nosso cardápio, estou aqui para ajudar! 😊"
+- ✅ "Oi, {customer_name}! Que bom ter você aqui no {restaurant_name}! 🙌 Sou {attendant_article}{attendant_name}. Se precisar de ajuda para escolher, é só chamar!"
+- ✅ "Olá, {customer_name}! Bem-vindo(a) ao {restaurant_name}! 😊 Sou {attendant_article}{attendant_name}. Estou à disposição para qualquer dúvida!"
 
 **Se o cliente já mandou uma pergunta específica na primeira mensagem:**
-- ✅ "Olá, {customer_name}! Bem-vindo(a) ao {restaurant_name}! 😊 Sou a {attendant_name}. [resposta à pergunta]. Se precisar de mais alguma coisa, estou aqui!"
+- ✅ "Olá, {customer_name}! Bem-vindo(a) ao {restaurant_name}! 😊 Sou {attendant_article}{attendant_name}. [resposta à pergunta]. Se precisar de mais alguma coisa, estou aqui!"
 
 **Mensagens subsequentes (cliente já foi saudado):**
 - Responda direto ao que foi perguntado, sem repetir apresentação.
 - **NÃO use mais o nome do cliente** — apenas na primeira interação.
-- **NÃO repita "eu sou a {attendant_name}", "bem-vindo(a)" ou o nome do restaurante a cada mensagem.**
+- **NÃO repita "eu sou {attendant_article}{attendant_name}", "bem-vindo(a)" ou o nome do restaurante a cada mensagem.**
 - Se você já orientou o cliente a usar o cardápio, não repita a mesma orientação com outras palavras. Seja breve e avance a conversa.
 - Continue sendo educada e acolhedora, mas mais direta.
 
@@ -415,6 +415,10 @@ Assim que abrirmos, será um prazer atender você!"""
         current_weekday_pt: str = "",
     ) -> str:
         """Build the complete system prompt with three-level memory context."""
+        # The attendant name can never be empty: fall back by gender (Maria/José).
+        attendant_name = (attendant_name or "").strip() or cls._default_attendant_name(
+            attendant_gender
+        )
         hours_text = tacto_hours.strip() if tacto_hours else cls._format_opening_hours(opening_hours)
         address_text = tacto_address.strip() if tacto_address else "Endereço não disponível."
 
@@ -442,6 +446,7 @@ Assim que abrirmos, será um prazer atender você!"""
         return cls.SYSTEM_PROMPT.format(
             attendant_name=attendant_name,
             attendant_article=cls._build_attendant_article(attendant_gender),
+            attendant_role=cls._build_attendant_role(attendant_gender),
             attendant_description=cls._build_attendant_description(attendant_gender),
             restaurant_name=restaurant_name,
             customer_name=customer_name or "Cliente",
@@ -549,6 +554,25 @@ Assim que abrirmos, será um prazer atender você!"""
         """Return the grammatical article for the attendant's self-reference."""
         articles = {"feminino": "a ", "masculino": "o ", "neutro": ""}
         return articles.get(gender, "a ")
+
+    @classmethod
+    def _build_attendant_role(cls, gender: str) -> str:
+        """Gender-correct self-introduction role ("sua atendente" / "seu atendente")."""
+        roles = {
+            "feminino": "sua atendente virtual",
+            "masculino": "seu atendente virtual",
+            "neutro": "atendente virtual",
+        }
+        return roles.get(gender, "sua atendente virtual")
+
+    @classmethod
+    def _default_attendant_name(cls, gender: str) -> str:
+        """Gender-based default name — the attendant is never nameless."""
+        from tacto.domain.restaurant.value_objects.agent_persona import (
+            DEFAULT_NAME_BY_GENDER,
+        )
+
+        return DEFAULT_NAME_BY_GENDER.get(gender, "Maria")
 
     @classmethod
     def _build_attendant_description(cls, gender: str) -> str:

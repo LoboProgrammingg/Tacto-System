@@ -20,6 +20,10 @@ from typing import Optional
 _VALID_GENDERS = frozenset({"feminino", "masculino", "neutro"})
 _VALID_STYLES = frozenset({"formal", "informal"})
 
+# The attendant name is never allowed to be empty: when neither the restaurant
+# nor the platform provides one, it falls back by gender.
+DEFAULT_NAME_BY_GENDER = {"feminino": "Maria", "masculino": "José", "neutro": "Maria"}
+
 
 @dataclass(frozen=True)
 class AgentPersonaConfig:
@@ -58,9 +62,22 @@ class AgentPersonaConfig:
     # Effective value resolvers — apply platform default when field is None
     # -------------------------------------------------------------------------
 
-    def effective_attendant_name(self, platform_default: str) -> str:
-        """Return restaurant-specific name, or platform default."""
-        return self.attendant_name or platform_default
+    def effective_attendant_name(self, platform_default: str = "") -> str:
+        """Resolve the attendant name — never an empty string.
+
+        Precedence: restaurant-chosen name > gender default when the restaurant
+        explicitly chose a gender (José for masculino, Maria for feminino) >
+        platform default > gender default.
+        """
+        name = (self.attendant_name or "").strip()
+        if name:
+            return name
+        if self.attendant_gender is not None:
+            return DEFAULT_NAME_BY_GENDER.get(self.attendant_gender, "Maria")
+        name = (platform_default or "").strip()
+        if name:
+            return name
+        return DEFAULT_NAME_BY_GENDER.get(self.effective_gender(), "Maria")
 
     def effective_gender(self, platform_default: str = "feminino") -> str:
         """Return restaurant-specific gender, or platform default."""

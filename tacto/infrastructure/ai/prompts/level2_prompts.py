@@ -484,6 +484,11 @@ Assim que abrirmos, será um prazer atender você!"""
         """
         from tacto.infrastructure.ai.prompts.level1_prompts import Level1Prompts
 
+        # The attendant name can never be empty: fall back by gender (Maria/José).
+        attendant_name = (attendant_name or "").strip() or Level1Prompts._default_attendant_name(
+            attendant_gender
+        )
+
         menu_url_text = (
             menu_url.strip()
             if menu_url and menu_url.strip()

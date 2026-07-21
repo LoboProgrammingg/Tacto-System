@@ -86,6 +86,7 @@ def _build_agent_context(
         if settings.app.bypass_hours_check or not restaurant.opening_hours.is_defined()
         else restaurant.is_open_now()
     )
+    persona = restaurant.agent_config
 
     return AgentContext(
         restaurant_id=restaurant.id.value,
@@ -104,6 +105,10 @@ def _build_agent_context(
         current_date_br=current_datetime.strftime("%d/%m/%Y"),
         current_time_br=current_datetime.strftime("%H:%M"),
         current_weekday_pt=_WEEKDAY_NAMES_PT[current_datetime.weekday()],
+        attendant_name=persona.effective_attendant_name(settings.app.attendant_name),
+        attendant_gender=persona.effective_gender(settings.app.attendant_gender),
+        persona_style=persona.effective_persona_style(settings.app.attendant_persona_style),
+        max_emojis_per_message=persona.effective_max_emojis(settings.app.attendant_max_emojis),
     )
 
 
