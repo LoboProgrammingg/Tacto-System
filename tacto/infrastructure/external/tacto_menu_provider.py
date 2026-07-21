@@ -266,6 +266,7 @@ class TactoMenuProvider(MenuProvider):
             address=self._extract_address(data),
             hours_text=self._extract_hours_text(data),
             opening_hours=self._extract_opening_hours_dict(data),
+            state_uf=self._extract_uf(data),
             restaurant_description=data.get("atividadesServicos") or data.get("nossaHistoria") or "",
         )
 
@@ -354,6 +355,11 @@ class TactoMenuProvider(MenuProvider):
             parts.append(f"CEP {cep}")
 
         return ", ".join(p for p in parts if p)
+
+    def _extract_uf(self, data: dict) -> Optional[str]:
+        """Extract the restaurant's state code (UF) from Tacto rag-full data."""
+        uf = data.get("endUFSigla")
+        return uf.strip().upper() if uf else None
 
     _PT_DAY_TO_EN: dict[str, str] = {
         "segunda": "monday",

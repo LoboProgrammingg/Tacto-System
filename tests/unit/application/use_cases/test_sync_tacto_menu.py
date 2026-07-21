@@ -171,6 +171,20 @@ class TestMenuData:
         assert menu.address is None
         assert menu.hours_text == ""
         assert menu.restaurant_description == ""
+        assert menu.state_uf is None
+
+    def test_menu_data_carries_state_uf(self):
+        """MenuData should carry the restaurant state (UF) when Tacto provides it."""
+        rid = RestaurantId(uuid4())
+        menu = MenuData(
+            restaurant_id=rid,
+            items=[],
+            categories=[],
+            raw_text="",
+            last_updated="",
+            state_uf="SP",
+        )
+        assert menu.state_uf == "SP"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

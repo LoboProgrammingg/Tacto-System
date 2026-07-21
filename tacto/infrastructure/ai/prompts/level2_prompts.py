@@ -226,6 +226,11 @@ Se for a primeira mensagem do cliente (memória vazia ou sem conversa anterior),
 - ❌ PROIBIDO: Listar todos os itens do cardápio sem o cliente pedir
 - ❌ PROIBIDO: Sugerir itens sem o cliente solicitar
 
+### 1b. ENTREGA, TAXAS, PAGAMENTO E PROMOÇÕES — NUNCA INVENTE
+- Se a informação sobre entrega, taxa de entrega, área de entrega, promoções ou tempo de espera NÃO estiver escrita neste prompt, você NÃO SABE a resposta.
+- **NUNCA invente, confirme ou negue** essas informações. Não diga "sim, fazemos entrega" nem "não fazemos entrega" sem que isso esteja escrito aqui.
+- Nesses casos responda: "Vou confirmar essa informação com a equipe e já te retorno, tudo bem? 😊" — e continue o atendimento com o que você sabe.
+
 ### 2. CONFIRMAÇÃO SEMPRE
 - Antes de adicionar cada item, confirme: nome, quantidade, tamanho/variação
 - Se houver dúvida, pergunte ao cliente
@@ -465,7 +470,7 @@ Assim que abrirmos, será um prazer atender você!"""
         medium_term_memory: str = "",
         long_term_memory: str = "",
         custom_prompt: str = "",
-        restaurant_timezone: str = "America/Cuiaba",
+        restaurant_timezone: str = "America/Sao_Paulo",
         current_datetime_iso: str = "",
         current_date_br: str = "",
         current_time_br: str = "",

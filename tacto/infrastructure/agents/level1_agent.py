@@ -142,11 +142,29 @@ class Level1Agent(BaseAgent):
             customer_name = context.customer_name or "Cliente"
             triggered_actions = []
 
-            # Closed-restaurant template fires ONLY when the customer explicitly asks
-            # about opening hours / open status. For any other message, let the LLM
-            # converse normally — the system prompt already instructs it not to
-            # volunteer hours/closed status proactively.
-            if not context.is_open and Level1Prompts.is_hours_question(message):
+            # When the restaurant is closed, reply ONCE with the polite closed
+            # template and then stay silent — no LLM call, for any message.
+            # is_open is fail-open (undefined hours = treated as open), so this
+            # only fires when hours are known and we are genuinely outside them.
+            if not context.is_open:
+                if _history_recently_sent_closed(conversation_history):
+                    log.info(
+                        "restaurant_closed_muted",
+                        customer_phone=context.customer_phone,
+                    )
+                    return Ok(
+                        AgentResponse(
+                            message="",
+                            should_send=False,
+                            metadata={
+                                "customer_name": customer_name,
+                                "restaurant_name": context.restaurant_name,
+                            },
+                            tokens_used=0,
+                            processing_time_ms=int((time.time() - start_time) * 1000),
+                            triggered_actions=["restaurant_closed_muted"],
+                        )
+                    )
                 closed_message = Level1Prompts.get_closed_response(
                     menu_url=context.menu_url,
                     next_opening=context.next_opening_text,
@@ -281,8 +299,12 @@ class Level1Agent(BaseAgent):
 
             is_first_message = len(conversation_history) == 0
             recent_menu_sent = _history_recently_sent_menu(conversation_history, context.menu_url)
-            explicit_menu_request = _is_explicit_menu_request(message)
-            if Level1Prompts.should_send_menu(message) and (explicit_menu_request or not recent_menu_sent):
+            explicit_menu_request = _is_explicit_menu_request(
+                message, conversation_history, context.menu_url
+            )
+            if explicit_menu_request or (
+                Level1Prompts.should_send_menu(message) and not recent_menu_sent
+            ):
                 triggered_actions.append("menu_url_sent")
                 log.info(
                     "Menu trigger detected",
@@ -417,13 +439,52 @@ def _history_recently_sent_menu(conversation_history: list[dict[str, str]], menu
     return False
 
 
-def _is_explicit_menu_request(message: str) -> bool:
-    """Return True when the user explicitly asks to receive/open the menu link."""
+_MENU_RESEND_TERMS = [
+    "de novo",
+    "denovo",
+    "novamente",
+    "reenvia",
+    "reenviar",
+    "manda ai",
+    "manda aí",
+    "nao recebi",
+    "não recebi",
+    "nao chegou",
+    "não chegou",
+]
+
+# When a resend request names another topic, it is not about the menu link.
+_MENU_RESEND_OTHER_TOPICS = ["endereço", "endereco", "horário", "horario"]
+
+
+def _is_explicit_menu_request(
+    message: str,
+    conversation_history: Optional[list[dict[str, str]]] = None,
+    menu_url: str = "",
+) -> bool:
+    """Return True when the user explicitly asks to receive/open the menu link.
+
+    Also treats generic resend requests ("manda de novo", "não recebi") as a
+    menu request when the menu link was what the assistant sent recently.
+    """
     text = message.lower()
-    explicit_terms = [
-        "cardápio", "cardapio", "menu", "link",
-    ]
-    return any(term in text for term in explicit_terms)
+    if any(term in text for term in ("cardápio", "cardapio", "menu", "link")):
+        return True
+    if any(term in text for term in _MENU_RESEND_TERMS) and not any(
+        topic in text for topic in _MENU_RESEND_OTHER_TOPICS
+    ):
+        return _history_recently_sent_menu(conversation_history or [], menu_url)
+    return False
+
+
+def _history_recently_sent_closed(conversation_history: list[dict[str, str]]) -> bool:
+    """True if the closed-restaurant template was already sent recently."""
+    recent = conversation_history[-8:]
+    return any(
+        msg.get("role") == "assistant"
+        and "estamos fechados" in msg.get("content", "").lower()
+        for msg in recent
+    )
 
 
 def _is_short_acknowledgement(message: str) -> bool:

@@ -20,6 +20,7 @@ import structlog
 
 from tacto.application.ports.menu_provider import MenuProvider, MenuItem
 from tacto.domain.restaurant.repository import RestaurantRepository
+from tacto.domain.restaurant.value_objects.timezone_br import timezone_for_uf
 from tacto.shared.application import Err, Failure, Ok, Success
 from tacto.shared.domain.value_objects import RestaurantId
 from tacto.infrastructure.ai.gemini_client import GeminiClient
@@ -178,6 +179,24 @@ class SyncTactoMenuUseCase:
                 log.warning("opening_hours_update_failed", error=str(hours_result.error))
             else:
                 log.info("opening_hours_updated", days=list(menu.opening_hours.keys()))
+
+        # 10. Derive timezone from the restaurant's state (UF) when Tacto returns it.
+        # Heals restaurants created with the default timezone.
+        if menu.state_uf:
+            derived_tz = timezone_for_uf(menu.state_uf)
+            if derived_tz and derived_tz != restaurant.timezone:
+                tz_result = await self._restaurant_repo.update_timezone(
+                    RestaurantId(restaurant_id), derived_tz
+                )
+                if isinstance(tz_result, Failure):
+                    log.warning("timezone_update_failed", error=str(tz_result.error))
+                else:
+                    log.info(
+                        "timezone_updated_from_uf",
+                        uf=menu.state_uf,
+                        timezone=derived_tz,
+                        previous=restaurant.timezone,
+                    )
 
         log.info("sync_complete", items_saved=items_saved)
 

@@ -518,21 +518,20 @@ class TestLevel1PromptsUnit:
 
 
 class TestLevel1AgentClosedGating:
-    """Test that closed-template only fires on explicit hours questions."""
+    """A closed restaurant always returns the closed template, for ANY message."""
 
     @pytest.mark.asyncio
-    async def test_closed_plus_non_hours_message_invokes_llm(
+    async def test_closed_any_message_returns_template_without_llm(
         self,
         closed_context: AgentContext,
     ):
-        """When restaurant is closed but customer doesn't ask about hours,
-        the agent must NOT short-circuit with the closed template — it must
-        call the LLM normally."""
+        """When the restaurant is closed, ANY message must short-circuit with the
+        closed template without calling the LLM — even a non-hours message."""
         agent = Level1Agent()
 
         with patch.object(agent, "_initialized", True):
             with patch.object(agent, "_chain") as mock_chain:
-                mock_chain.ainvoke = AsyncMock(return_value="Oi! Como posso ajudar?")
+                mock_chain.ainvoke = AsyncMock(return_value="should not be called")
                 result = await agent.process(
                     message="Oi",
                     context=closed_context,
@@ -540,16 +539,15 @@ class TestLevel1AgentClosedGating:
                 )
 
         assert isinstance(result, Success)
-        assert "restaurant_closed" not in result.value.triggered_actions
-        mock_chain.ainvoke.assert_awaited_once()
+        assert "restaurant_closed" in result.value.triggered_actions
+        mock_chain.ainvoke.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_closed_plus_hours_question_returns_template(
         self,
         closed_context: AgentContext,
     ):
-        """When restaurant is closed AND customer asks about hours, the agent
-        must short-circuit with the closed template without calling the LLM."""
+        """A closed restaurant also returns the template for an explicit hours question."""
         agent = Level1Agent()
 
         with patch.object(agent, "_initialized", True):
@@ -564,6 +562,152 @@ class TestLevel1AgentClosedGating:
         assert isinstance(result, Success)
         assert "restaurant_closed" in result.value.triggered_actions
         mock_chain.ainvoke.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_open_restaurant_does_not_short_circuit(
+        self,
+        agent_context: AgentContext,
+    ):
+        """When the restaurant is open, the closed template must NOT fire."""
+        agent = Level1Agent()
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="Oi! Como posso ajudar?")
+                result = await agent.process(
+                    message="Oi",
+                    context=agent_context,
+                    conversation_history=[],
+                )
+
+        assert isinstance(result, Success)
+        assert "restaurant_closed" not in result.value.triggered_actions
+        mock_chain.ainvoke.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_closed_notifies_once_then_stays_silent(
+        self,
+        closed_context: AgentContext,
+    ):
+        """After the closed template was sent, further messages get NO reply."""
+        agent = Level1Agent()
+        history = [
+            {"role": "user", "content": "Oi"},
+            {"role": "assistant", "content": "Olá! 😊\n\nNo momento, estamos fechados.\n..."},
+        ]
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="should not be called")
+                result = await agent.process(
+                    message="mas eu queria pedir",
+                    context=closed_context,
+                    conversation_history=history,
+                )
+
+        assert isinstance(result, Success)
+        assert result.value.should_send is False
+        assert "restaurant_closed_muted" in result.value.triggered_actions
+        mock_chain.ainvoke.assert_not_called()
+
+
+class TestLevel1AgentMenuResend:
+    """Explicit menu re-requests must always resend the link."""
+
+    @pytest.mark.asyncio
+    async def test_explicit_cardapio_request_resends_even_if_recent(
+        self,
+        agent_context: AgentContext,
+    ):
+        """'manda o cardápio de novo' with link already in history → link appended."""
+        agent = Level1Agent()
+        history = [
+            {"role": "assistant", "content": "Cardápio e pedidos\nhttps://cardapio.teste.com"},
+            {"role": "user", "content": "obrigado"},
+        ]
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="Claro, aqui está!")
+                result = await agent.process(
+                    message="manda o cardápio de novo",
+                    context=agent_context,
+                    conversation_history=history,
+                )
+
+        assert isinstance(result, Success)
+        assert "cardapio.teste.com" in result.value.message
+        assert "menu_url_sent" in result.value.triggered_actions
+
+    @pytest.mark.asyncio
+    async def test_generic_resend_request_after_menu_link_resends(
+        self,
+        agent_context: AgentContext,
+    ):
+        """'manda de novo' (without the word cardápio) after link → link appended."""
+        agent = Level1Agent()
+        history = [
+            {"role": "assistant", "content": "Cardápio e pedidos\nhttps://cardapio.teste.com"},
+            {"role": "user", "content": "vlw"},
+        ]
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="Claro, segue novamente!")
+                result = await agent.process(
+                    message="não recebi, manda de novo por favor",
+                    context=agent_context,
+                    conversation_history=history,
+                )
+
+        assert isinstance(result, Success)
+        assert "cardapio.teste.com" in result.value.message
+        assert "menu_url_sent" in result.value.triggered_actions
+
+    @pytest.mark.asyncio
+    async def test_resend_request_about_address_does_not_send_menu(
+        self,
+        agent_context: AgentContext,
+    ):
+        """'manda o endereço de novo' must NOT be treated as a menu request."""
+        agent = Level1Agent()
+        history = [
+            {"role": "assistant", "content": "Cardápio e pedidos\nhttps://cardapio.teste.com"},
+            {"role": "user", "content": "vlw"},
+        ]
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="Rua Teste, 123!")
+                result = await agent.process(
+                    message="manda o endereço de novo",
+                    context=agent_context,
+                    conversation_history=history,
+                )
+
+        assert isinstance(result, Success)
+        assert "cardapio.teste.com" not in result.value.message
+        assert "menu_url_sent" not in result.value.triggered_actions
+
+
+class TestLevel1PromptsAntiInvention:
+    """Prompt must forbid inventing delivery/payment/promo info."""
+
+    def test_system_prompt_contains_delivery_guardrail(self):
+        prompt = Level1Prompts.build_system_prompt(
+            restaurant_name="Restaurante",
+            menu_url="https://cardapio.com",
+            opening_hours={},
+            customer_name="Cliente",
+            rag_context="",
+            tacto_address="",
+            tacto_hours="",
+            custom_prompt=None,
+        )
+
+        assert "ENTREGA, TAXAS, PAGAMENTO E PROMOÇÕES — NUNCA INVENTE" in prompt
+        assert "NUNCA invente, confirme ou negue" in prompt
+        assert "Vou confirmar essa informação com a equipe" in prompt
 
 
 class TestLevel1AgentStaleContext:

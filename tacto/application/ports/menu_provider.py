@@ -52,6 +52,7 @@ class MenuData:
     hours_text: str = ""
     restaurant_description: str = ""
     opening_hours: dict[str, Any] = field(default_factory=dict)
+    state_uf: Optional[str] = None
 
 
 @dataclass(frozen=True, slots=True)

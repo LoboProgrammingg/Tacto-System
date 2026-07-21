@@ -87,7 +87,7 @@ class AppSettings(BaseSettings):
     )
 
     # Locale defaults
-    default_timezone: str = Field(default="America/Cuiaba", alias="DEFAULT_TIMEZONE")
+    default_timezone: str = Field(default="America/Sao_Paulo", alias="DEFAULT_TIMEZONE")
 
     # Security — API Key auth (empty = disabled)
     api_key: str = Field(default="", alias="API_KEY")

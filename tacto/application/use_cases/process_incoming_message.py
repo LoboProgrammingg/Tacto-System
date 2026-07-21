@@ -308,9 +308,16 @@ class ProcessIncomingMessageUseCase:
             except Exception as exc:
                 log.warning("tacto_meta_fetch_failed", error=str(exc))
 
-        # Calculate if restaurant is open and next opening time
-        # BYPASS_HOURS_CHECK=true forces open state — useful for local testing
-        is_open = True if _settings.app.bypass_hours_check else restaurant.is_open_now()
+        # Calculate if restaurant is open and next opening time.
+        # BYPASS_HOURS_CHECK=true forces open state — useful for local testing.
+        # Fail-open: when opening hours are undefined (no reliable data) we treat
+        # the restaurant as open so the bot never wrongly tells a customer it is
+        # closed. "Closed" is only asserted when hours are known and we are outside.
+        is_open = (
+            True
+            if _settings.app.bypass_hours_check or not restaurant.opening_hours.is_defined()
+            else restaurant.is_open_now()
+        )
         next_opening_text = restaurant.opening_hours.get_next_opening(restaurant.timezone)
         current_datetime = self._get_restaurant_current_datetime(restaurant.timezone)
 

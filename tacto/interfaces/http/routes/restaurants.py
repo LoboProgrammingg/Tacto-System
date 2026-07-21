@@ -10,6 +10,7 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
+from tacto.config import get_settings
 from tacto.application.dto.restaurant_dto import (
     CreateRestaurantDTO,
     RestaurantResponseDTO,
@@ -56,6 +57,7 @@ async def create_restaurant(
         empresa_base_id=request.empresa_base_id,
         integration_type=request.integration_type,
         automation_type=request.automation_type,
+        timezone=request.timezone or get_settings().app.default_timezone,
         agent_config=request.agent_config.model_dump(exclude_none=True) if request.agent_config else None,
     )
 
@@ -81,6 +83,7 @@ async def create_restaurant(
         chave_grupo_empresarial=response_dto.chave_grupo_empresarial,
         canal_master_id=response_dto.canal_master_id,
         empresa_base_id=response_dto.empresa_base_id,
+        timezone=response_dto.timezone,
         is_active=response_dto.is_active,
         agent_config=response_dto.agent_config or {},
     )
@@ -122,6 +125,7 @@ async def list_restaurants() -> RestaurantListResponse:
             chave_grupo_empresarial=r.chave_grupo_empresarial,
             canal_master_id=r.canal_master_id,
             empresa_base_id=r.empresa_base_id,
+            timezone=r.timezone,
             is_active=r.is_active,
         )
         for r in result.value
@@ -166,6 +170,7 @@ async def get_restaurant(restaurant_id: UUID) -> RestaurantResponse:
         chave_grupo_empresarial=r.chave_grupo_empresarial,
         canal_master_id=r.canal_master_id,
         empresa_base_id=r.empresa_base_id,
+        timezone=r.timezone,
         is_active=r.is_active,
     )
 
@@ -187,6 +192,7 @@ async def update_restaurant(
         name=request.name,
         menu_url=request.menu_url,
         prompt_default=request.prompt_default,
+        timezone=request.timezone,
         automation_type=request.automation_type,
         integration_type=request.integration_type,
         is_active=request.is_active,

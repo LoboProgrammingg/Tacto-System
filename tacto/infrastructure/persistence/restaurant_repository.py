@@ -175,6 +175,22 @@ class PostgresRestaurantRepository(RestaurantRepository):
         except Exception as e:
             return Err(e)
 
+    async def update_timezone(
+        self, restaurant_id: RestaurantId, timezone: str
+    ) -> Success[bool] | Failure[Exception]:
+        """Update timezone directly without loading the full aggregate."""
+        try:
+            stmt = (
+                update(RestaurantModel)
+                .where(RestaurantModel.id == restaurant_id.value)
+                .values(timezone=timezone)
+            )
+            await self._session.execute(stmt)
+            await self._session.flush()
+            return Ok(True)
+        except Exception as e:
+            return Err(e)
+
     async def delete(
         self, restaurant_id: RestaurantId
     ) -> Success[bool] | Failure[Exception]:

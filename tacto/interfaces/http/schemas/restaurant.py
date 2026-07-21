@@ -53,6 +53,10 @@ class CreateRestaurantRequest(BaseModel):
         default=None,
         description="Horários de funcionamento. Se não informado, será preenchido automaticamente pelo tacto-sync.",
     )
+    timezone: Optional[str] = Field(
+        default=None,
+        description="Fuso horário IANA (ex: America/Sao_Paulo). Null = derivado do estado (UF) no tacto-sync, ou padrão do sistema.",
+    )
     chave_grupo_empresarial: UUID
     canal_master_id: str = Field(..., min_length=1)
     empresa_base_id: str = Field(..., min_length=1)
@@ -80,6 +84,10 @@ class UpdateRestaurantRequest(BaseModel):
         description="URL do Webgula para pedidos",
     )
     prompt_default: Optional[str] = Field(default=None)
+    timezone: Optional[str] = Field(
+        default=None,
+        description="Fuso horário IANA (ex: America/Sao_Paulo).",
+    )
     automation_type: Optional[int] = Field(default=None, ge=1, le=3)
     integration_type: Optional[int] = Field(default=None, ge=1, le=2)
     is_active: Optional[bool] = Field(default=None)
@@ -102,6 +110,7 @@ class RestaurantResponse(BaseModel):
     chave_grupo_empresarial: UUID
     canal_master_id: str
     empresa_base_id: str
+    timezone: str
     is_active: bool
     agent_config: dict[str, Any] = Field(
         default_factory=dict,

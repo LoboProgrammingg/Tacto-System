@@ -48,7 +48,7 @@ class Restaurant:
     chave_grupo_empresarial: UUID
     canal_master_id: str
     empresa_base_id: str
-    timezone: str = "America/Cuiaba"
+    timezone: str = "America/Sao_Paulo"
     agent_config: AgentPersonaConfig = field(default_factory=AgentPersonaConfig.empty)
     is_active: bool = True
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -211,7 +211,7 @@ class Restaurant:
         chave_grupo_empresarial: UUID,
         canal_master_id: str,
         empresa_base_id: str,
-        timezone: str = "America/Cuiaba",
+        timezone: str = "America/Sao_Paulo",
         agent_config: Optional[AgentPersonaConfig] = None,
         restaurant_id: Optional[RestaurantId] = None,
     ) -> "Restaurant":

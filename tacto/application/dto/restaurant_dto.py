@@ -23,7 +23,7 @@ class CreateRestaurantDTO:
     prompt_default: str = ""
     integration_type: int = 2  # JOIN
     automation_type: int = 1  # BASIC
-    timezone: str = "America/Cuiaba"
+    timezone: str = "America/Sao_Paulo"
     agent_config: Optional[dict[str, Any]] = None
 
 

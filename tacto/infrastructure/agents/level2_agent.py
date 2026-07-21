@@ -154,9 +154,29 @@ class Level2Agent(BaseAgent):
             customer_name = context.customer_name or "Cliente"
             triggered_actions = []
 
-            # Closed-restaurant template fires ONLY when the customer explicitly asks
-            # about opening hours / open status. Otherwise let the LLM converse.
-            if not context.is_open and Level2Prompts.is_hours_question(message):
+            # When the restaurant is closed, reply ONCE with the polite closed
+            # template and then stay silent — no LLM call, for any message.
+            # is_open is fail-open (undefined hours = treated as open), so this
+            # only fires when hours are known and we are genuinely outside them.
+            if not context.is_open:
+                if _history_recently_sent_closed(conversation_history):
+                    log.info(
+                        "restaurant_closed_muted",
+                        customer_phone=context.customer_phone,
+                    )
+                    return Ok(
+                        AgentResponse(
+                            message="",
+                            should_send=False,
+                            metadata={
+                                "customer_name": customer_name,
+                                "restaurant_name": context.restaurant_name,
+                            },
+                            tokens_used=0,
+                            processing_time_ms=int((time.time() - start_time) * 1000),
+                            triggered_actions=["restaurant_closed_muted"],
+                        )
+                    )
                 closed_message = Level2Prompts.format_closed_response(
                     menu_url=context.menu_url,
                     next_opening=context.next_opening_text,
@@ -268,7 +288,9 @@ class Level2Agent(BaseAgent):
                 rag_context_with_prices=context.rag_context or "",
                 restaurant_address=context.tacto_address or "",
                 opening_hours=context.tacto_hours or context.opening_hours or "",
-                payment_methods="Dinheiro, Cartão, PIX",
+                # Empty = template falls back to "Consulte o estabelecimento";
+                # never advertise payment methods we cannot confirm.
+                payment_methods="",
                 short_term_memory=short_term_memory,
                 medium_term_memory=medium_term_memory,
                 long_term_memory=long_term_memory,
@@ -346,18 +368,29 @@ class Level2Agent(BaseAgent):
                 config=config,
             )
 
-            # Ensure menu_url is present when the AI references the menu.
+            # Ensure menu_url is present when the AI references the menu or the
+            # customer explicitly asked for it (including "manda de novo").
             # The LLM often mentions "cardápio" but fails to reproduce the full URL.
             if context.menu_url and context.menu_url not in response_text:
+                explicit_menu_request = _is_explicit_menu_request(
+                    message, conversation_history, context.menu_url
+                )
                 should_append_menu = (
                     is_first_message
+                    or explicit_menu_request
                     or _response_mentions_menu(response_text)
                 )
                 if should_append_menu:
                     response_text = f"{response_text}\n\n📋 Cardápio: {context.menu_url}"
                     log.debug(
                         "menu_url_appended",
-                        reason="first_message" if is_first_message else "ai_mentioned_menu_without_url",
+                        reason=(
+                            "first_message"
+                            if is_first_message
+                            else "explicit_request"
+                            if explicit_menu_request
+                            else "ai_mentioned_menu_without_url"
+                        ),
                     )
 
             # Store messages in memory
@@ -420,3 +453,65 @@ def _response_mentions_menu(text: str) -> bool:
     """Return True if the AI response references the menu/cardápio without the actual URL."""
     text_lower = text.lower()
     return any(indicator in text_lower for indicator in _MENU_RESPONSE_INDICATORS)
+
+
+_MENU_RESEND_TERMS = [
+    "de novo",
+    "denovo",
+    "novamente",
+    "reenvia",
+    "reenviar",
+    "manda ai",
+    "manda aí",
+    "nao recebi",
+    "não recebi",
+    "nao chegou",
+    "não chegou",
+]
+
+# When a resend request names another topic, it is not about the menu link.
+_MENU_RESEND_OTHER_TOPICS = ["endereço", "endereco", "horário", "horario"]
+
+
+def _history_recently_sent_menu(conversation_history: list[dict[str, str]], menu_url: str) -> bool:
+    """Return True if the assistant recently sent this menu URL or a menu block."""
+    recent = conversation_history[-8:]
+    for msg in recent:
+        if msg.get("role") != "assistant":
+            continue
+        content = msg.get("content", "").lower()
+        if menu_url and menu_url.lower() in content:
+            return True
+        if "cardápio" in content and "http" in content:
+            return True
+    return False
+
+
+def _is_explicit_menu_request(
+    message: str,
+    conversation_history: Optional[list[dict[str, str]]] = None,
+    menu_url: str = "",
+) -> bool:
+    """Return True when the user explicitly asks to receive/open the menu link.
+
+    Also treats generic resend requests ("manda de novo", "não recebi") as a
+    menu request when the menu link was what the assistant sent recently.
+    """
+    text = message.lower()
+    if any(term in text for term in ("cardápio", "cardapio", "menu", "link")):
+        return True
+    if any(term in text for term in _MENU_RESEND_TERMS) and not any(
+        topic in text for topic in _MENU_RESEND_OTHER_TOPICS
+    ):
+        return _history_recently_sent_menu(conversation_history or [], menu_url)
+    return False
+
+
+def _history_recently_sent_closed(conversation_history: list[dict[str, str]]) -> bool:
+    """True if the closed-restaurant template was already sent recently."""
+    recent = conversation_history[-8:]
+    return any(
+        msg.get("role") == "assistant"
+        and "estamos fechados" in msg.get("content", "").lower()
+        for msg in recent
+    )

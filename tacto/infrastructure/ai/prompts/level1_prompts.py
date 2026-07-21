@@ -180,6 +180,11 @@ Use os ingredientes do cardápio para justificar a sugestão com 1 frase sedutor
 4. Informe endereço e horário apenas quando perguntado.
 5. Quando o cliente pedir para ver itens ou fazer pedido, responda de forma acolhedora — o link do cardápio será anexado automaticamente.
 
+## ENTREGA, TAXAS, PAGAMENTO E PROMOÇÕES — NUNCA INVENTE
+- Se a informação sobre entrega, taxa de entrega, área de entrega, formas de pagamento, promoções ou tempo de espera NÃO estiver escrita neste prompt (nas instruções do restaurante ou nos dados acima), você NÃO SABE a resposta.
+- **NUNCA invente, confirme ou negue** essas informações. Não diga "sim, fazemos entrega" nem "não fazemos entrega" sem que isso esteja escrito aqui.
+- Nesses casos responda: "Vou confirmar essa informação com a equipe e já te retorno, tudo bem? 😊" — e continue ajudando com o que você sabe.
+
 ## ITENS RELEVANTES PARA ESTA CONVERSA
 {rag_context}
 
@@ -403,7 +408,7 @@ Assim que abrirmos, será um prazer atender você!"""
         attendant_gender: str = "feminino",
         persona_style: str = "formal",
         max_emojis_per_message: int = 1,
-        restaurant_timezone: str = "America/Cuiaba",
+        restaurant_timezone: str = "America/Sao_Paulo",
         current_datetime_iso: str = "",
         current_date_br: str = "",
         current_time_br: str = "",

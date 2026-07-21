@@ -9,10 +9,12 @@ with the same customer_phone.
 import time
 from datetime import datetime, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import structlog
 from fastapi import APIRouter, HTTPException, status
 
+from tacto.config import get_settings
 from tacto.domain.ai_assistance.value_objects.agent_context import AgentContext
 from tacto.domain.messaging.entities.conversation import Conversation
 from tacto.domain.messaging.entities.message import Message
@@ -39,6 +41,70 @@ from tacto.interfaces.http.schemas.chat import ChatMessage, ChatRequest, ChatRes
 
 logger = structlog.get_logger()
 router = APIRouter()
+
+_WEEKDAY_NAMES_PT = (
+    "segunda-feira",
+    "terça-feira",
+    "quarta-feira",
+    "quinta-feira",
+    "sexta-feira",
+    "sábado",
+    "domingo",
+)
+
+
+def _get_restaurant_current_datetime(restaurant_timezone: str) -> datetime:
+    """Return the current local datetime for the restaurant timezone."""
+    settings = get_settings()
+    timezone_name = restaurant_timezone or settings.app.default_timezone
+
+    try:
+        timezone_obj = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        logger.warning(
+            "invalid_chat_route_timezone_falling_back_to_default",
+            restaurant_timezone=restaurant_timezone,
+            fallback_timezone=settings.app.default_timezone,
+        )
+        timezone_obj = ZoneInfo(settings.app.default_timezone)
+
+    return datetime.now(timezone_obj)
+
+
+def _build_agent_context(
+    *,
+    restaurant,
+    conversation: Conversation,
+    customer_phone: str,
+    customer_name: str | None,
+) -> AgentContext:
+    """Build agent context with exact restaurant-local temporal data."""
+    current_datetime = _get_restaurant_current_datetime(restaurant.timezone)
+    settings = get_settings()
+    is_open = (
+        True
+        if settings.app.bypass_hours_check or not restaurant.opening_hours.is_defined()
+        else restaurant.is_open_now()
+    )
+
+    return AgentContext(
+        restaurant_id=restaurant.id.value,
+        restaurant_name=restaurant.name,
+        customer_phone=customer_phone,
+        customer_name=customer_name or conversation.customer_name,
+        conversation_id=conversation.id.value,
+        menu_url=restaurant.menu_url,
+        prompt_default=restaurant.prompt_default,
+        opening_hours=restaurant.opening_hours.to_dict(),
+        automation_level=restaurant.automation_type.value,
+        is_open=is_open,
+        next_opening_text=restaurant.opening_hours.get_next_opening(restaurant.timezone),
+        restaurant_timezone=str(current_datetime.tzinfo),
+        current_datetime_iso=current_datetime.isoformat(),
+        current_date_br=current_datetime.strftime("%d/%m/%Y"),
+        current_time_br=current_datetime.strftime("%H:%M"),
+        current_weekday_pt=_WEEKDAY_NAMES_PT[current_datetime.weekday()],
+    )
 
 
 @router.post(
@@ -129,16 +195,11 @@ async def chat_test(request: ChatRequest) -> ChatResponse:
             long_term_port=PostgresMemoryAdapter(session),
         )
         agent = create_agent(restaurant.automation_type, memory_manager=memory_manager)
-        context = AgentContext(
-            restaurant_id=restaurant.id.value,
-            restaurant_name=restaurant.name,
+        context = _build_agent_context(
+            restaurant=restaurant,
+            conversation=conversation,
             customer_phone=request.customer_phone,
-            customer_name=request.customer_name or conversation.customer_name,
-            conversation_id=conversation.id.value,
-            menu_url=restaurant.menu_url,
-            prompt_default=restaurant.prompt_default,
-            opening_hours=restaurant.opening_hours.to_dict(),
-            automation_level=restaurant.automation_type.value,
+            customer_name=request.customer_name,
         )
 
         agent_result = await agent.process(

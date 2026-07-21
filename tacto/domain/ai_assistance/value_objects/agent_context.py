@@ -24,7 +24,7 @@ class AgentContext:
     automation_level: int = 1
     is_open: bool = True
     next_opening_text: str = ""
-    restaurant_timezone: str = "America/Cuiaba"
+    restaurant_timezone: str = "America/Sao_Paulo"
     current_datetime_iso: str = ""
     current_date_br: str = ""
     current_time_br: str = ""

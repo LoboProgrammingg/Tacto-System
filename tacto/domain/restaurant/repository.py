@@ -133,6 +133,18 @@ class RestaurantRepository(ABC):
         pass
 
     @abstractmethod
+    async def update_timezone(
+        self, restaurant_id: RestaurantId, timezone: str
+    ) -> Success[bool] | Failure[Exception]:
+        """
+        Update the IANA timezone for a restaurant.
+
+        Used by tacto-sync to derive the timezone from the restaurant's
+        state (UF) returned by the Tacto API.
+        """
+        pass
+
+    @abstractmethod
     async def delete(
         self, restaurant_id: RestaurantId
     ) -> Success[bool] | Failure[Exception]:

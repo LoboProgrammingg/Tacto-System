@@ -77,7 +77,7 @@ class RestaurantModel(Base, TimestampMixin):
     timezone: Mapped[str] = mapped_column(
         String(63),
         nullable=False,
-        default="America/Cuiaba",
+        default="America/Sao_Paulo",
     )
 
     agent_config: Mapped[dict] = mapped_column(

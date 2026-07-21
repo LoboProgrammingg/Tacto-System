@@ -33,7 +33,7 @@ class DayOfWeek(str, Enum):
         return days[dt.weekday()]
 
     @classmethod
-    def today(cls, tz: str = "America/Cuiaba") -> "DayOfWeek":
+    def today(cls, tz: str = "America/Sao_Paulo") -> "DayOfWeek":
         """Get current day of week in the given timezone."""
         return cls.from_datetime(datetime.now(ZoneInfo(tz)))
 
@@ -189,20 +189,29 @@ class OpeningHours:
         }
         return schedules[day]
 
-    def is_open_now(self, tz: str = "America/Cuiaba") -> bool:
+    def is_open_now(self, tz: str = "America/Sao_Paulo") -> bool:
         """Check if restaurant is currently open in the given timezone."""
         now = datetime.now(ZoneInfo(tz))
         today = DayOfWeek.from_datetime(now)
         schedule = self.get_schedule(today)
         return schedule.is_open_at(now.time())
 
-    def get_today_hours(self, tz: str = "America/Cuiaba") -> str:
+    def is_defined(self) -> bool:
+        """True if at least one day has open hours (reliable data exists).
+
+        A real restaurant is never closed all 7 days; an all-closed schedule
+        means we simply have no hours data. Callers treat "not defined" as
+        open (fail-open) so the bot never wrongly tells a customer it is closed.
+        """
+        return any(not self.get_schedule(day).is_closed for day in DayOfWeek)
+
+    def get_today_hours(self, tz: str = "America/Sao_Paulo") -> str:
         """Get formatted hours for today only in the given timezone."""
         today = DayOfWeek.today(tz)
         schedule = self.get_schedule(today)
         return schedule.formatted_hours
 
-    def get_next_opening(self, tz: str = "America/Cuiaba") -> str:
+    def get_next_opening(self, tz: str = "America/Sao_Paulo") -> str:
         """
         Get humanized string for next opening time.
 
@@ -253,7 +262,7 @@ class OpeningHours:
 
         return "Consulte nossos horários de funcionamento"
 
-    def get_next_opening_utc(self, tz: str = "America/Cuiaba") -> Optional[datetime]:
+    def get_next_opening_utc(self, tz: str = "America/Sao_Paulo") -> Optional[datetime]:
         """
         Return the UTC datetime of the next restaurant opening.
 
@@ -290,7 +299,7 @@ class OpeningHours:
 
         return None
 
-    def get_today_schedule(self, tz: str = "America/Cuiaba") -> DaySchedule:
+    def get_today_schedule(self, tz: str = "America/Sao_Paulo") -> DaySchedule:
         """Get schedule for today in the given timezone."""
         today = DayOfWeek.today(tz)
         return self.get_schedule(today)
