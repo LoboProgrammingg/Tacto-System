@@ -103,6 +103,8 @@ def mock_restaurant_repository(mock_restaurant: Restaurant) -> MagicMock:
     """Create mock restaurant repository."""
     repo = MagicMock()
     repo.find_by_canal_master_id = AsyncMock(return_value=Success(mock_restaurant))
+    repo.update_opening_hours = AsyncMock(return_value=Success(True))
+    repo.update_timezone = AsyncMock(return_value=Success(True))
     return repo
 
 
@@ -587,3 +589,146 @@ class TestProcessIncomingMessageErrorHandling:
         assert isinstance(result, Success)
         assert result.value.response_sent is False
         assert "Failed to send" in result.value.error
+
+
+class TestFreshHoursRefresh:
+    """Opening hours / timezone must refresh continuously from fresh Tacto data."""
+
+    FRESH_HOURS = {
+        "monday": {"is_closed": True},
+        "tuesday": {"opens_at": "17:00", "closes_at": "23:00"},
+        "wednesday": {"opens_at": "17:00", "closes_at": "23:00"},
+        "thursday": {"opens_at": "17:00", "closes_at": "23:00"},
+        "friday": {"opens_at": "17:00", "closes_at": "23:00"},
+        "saturday": {"opens_at": "17:00", "closes_at": "23:00"},
+        "sunday": {"opens_at": "17:00", "closes_at": "23:00"},
+    }
+
+    def _menu_provider(self, mock_restaurant, opening_hours, state_uf=None, fail=False):
+        from tacto.application.ports.menu_provider import MenuData
+
+        provider = MagicMock()
+        if fail:
+            provider.get_menu = AsyncMock(return_value=Failure(RuntimeError("tacto down")))
+        else:
+            menu = MenuData(
+                restaurant_id=mock_restaurant.id,
+                items=[],
+                categories=[],
+                raw_text="",
+                last_updated="",
+                hours_text="- Terça: 17:00 às 23:00",
+                opening_hours=opening_hours,
+                state_uf=state_uf,
+            )
+            provider.get_menu = AsyncMock(return_value=Success(menu))
+        return provider
+
+    def _use_case(self, repos, menu_provider):
+        (rest_repo, conv_repo, msg_repo, msging, agent) = repos
+        return ProcessIncomingMessageUseCase(
+            restaurant_repository=rest_repo,
+            conversation_repository=conv_repo,
+            message_repository=msg_repo,
+            messaging_client=msging,
+            ai_agent=agent,
+            menu_provider=menu_provider,
+        )
+
+    def _settings_patch(self, mock_settings):
+        mock_settings.return_value.app.conversation_history_limit = 10
+        mock_settings.return_value.app.conversation_reset_after_hours = 24
+        mock_settings.return_value.app.bypass_hours_check = False
+        mock_settings.return_value.app.ai_disable_hours = 12
+        mock_settings.return_value.app.default_timezone = "America/Cuiaba"
+        mock_settings.return_value.gemini.level1_rag_search_limit = 5
+
+    @pytest.mark.asyncio
+    async def test_fresh_hours_override_db_and_persist(
+        self,
+        mock_restaurant,
+        mock_restaurant_repository,
+        mock_conversation_repository,
+        mock_message_repository,
+        mock_messaging_client,
+        mock_ai_agent,
+        incoming_message_dto,
+    ):
+        """Fresh Tacto hours differ from DB → context uses fresh + DB updated."""
+        provider = self._menu_provider(mock_restaurant, self.FRESH_HOURS)
+        use_case = self._use_case(
+            (mock_restaurant_repository, mock_conversation_repository,
+             mock_message_repository, mock_messaging_client, mock_ai_agent),
+            provider,
+        )
+
+        with patch("tacto.application.use_cases.process_incoming_message.get_settings") as ms:
+            self._settings_patch(ms)
+            result = await use_case.execute(incoming_message_dto)
+
+        assert isinstance(result, Success)
+        mock_restaurant_repository.update_opening_hours.assert_awaited_once()
+        _, call_kwargs = mock_ai_agent.process.call_args
+        context = call_kwargs["context"]
+        assert context.opening_hours["monday"] == {"is_closed": True}
+        assert context.opening_hours["tuesday"]["opens_at"] == "17:00"
+
+    @pytest.mark.asyncio
+    async def test_fetch_failure_falls_back_to_db_hours(
+        self,
+        mock_restaurant,
+        mock_restaurant_repository,
+        mock_conversation_repository,
+        mock_message_repository,
+        mock_messaging_client,
+        mock_ai_agent,
+        incoming_message_dto,
+    ):
+        """Tacto fetch fails → DB hours used, nothing persisted."""
+        provider = self._menu_provider(mock_restaurant, {}, fail=True)
+        use_case = self._use_case(
+            (mock_restaurant_repository, mock_conversation_repository,
+             mock_message_repository, mock_messaging_client, mock_ai_agent),
+            provider,
+        )
+
+        with patch("tacto.application.use_cases.process_incoming_message.get_settings") as ms:
+            self._settings_patch(ms)
+            result = await use_case.execute(incoming_message_dto)
+
+        assert isinstance(result, Success)
+        mock_restaurant_repository.update_opening_hours.assert_not_awaited()
+        mock_restaurant_repository.update_timezone.assert_not_awaited()
+        _, call_kwargs = mock_ai_agent.process.call_args
+        context = call_kwargs["context"]
+        assert context.opening_hours["monday"]["opens_at"] == "11:00"  # DB fixture
+
+    @pytest.mark.asyncio
+    async def test_state_uf_refreshes_timezone(
+        self,
+        mock_restaurant,
+        mock_restaurant_repository,
+        mock_conversation_repository,
+        mock_message_repository,
+        mock_messaging_client,
+        mock_ai_agent,
+        incoming_message_dto,
+    ):
+        """Fresh state UF differing from stored tz → timezone updated and used."""
+        provider = self._menu_provider(mock_restaurant, self.FRESH_HOURS, state_uf="PA")
+        use_case = self._use_case(
+            (mock_restaurant_repository, mock_conversation_repository,
+             mock_message_repository, mock_messaging_client, mock_ai_agent),
+            provider,
+        )
+
+        with patch("tacto.application.use_cases.process_incoming_message.get_settings") as ms:
+            self._settings_patch(ms)
+            result = await use_case.execute(incoming_message_dto)
+
+        assert isinstance(result, Success)
+        mock_restaurant_repository.update_timezone.assert_awaited_once()
+        args, _ = mock_restaurant_repository.update_timezone.call_args
+        assert args[1] == "America/Belem"
+        _, call_kwargs = mock_ai_agent.process.call_args
+        assert call_kwargs["context"].restaurant_timezone == "America/Belem"

@@ -253,12 +253,16 @@ class OpeningHours:
                     continue
 
                 time_str = slot_opens.strftime("%H:%M")
+                date_str = check_date.strftime("%d/%m")
                 if days_ahead == 0:
                     return f"Abrimos hoje às {time_str}"
                 elif days_ahead == 1:
-                    return f"Abrimos amanhã, {day_name_pt[day_of_week]}, às {time_str}"
+                    return (
+                        f"Abrimos amanhã, {day_name_pt[day_of_week]} "
+                        f"({date_str}), às {time_str}"
+                    )
                 else:
-                    return f"Abrimos {day_name_pt[day_of_week]} às {time_str}"
+                    return f"Abrimos {day_name_pt[day_of_week]} ({date_str}) às {time_str}"
 
         return "Consulte nossos horários de funcionamento"
 

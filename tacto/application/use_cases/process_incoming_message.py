@@ -28,9 +28,11 @@ from tacto.domain.messaging.repository import ConversationRepository, MessageRep
 from tacto.domain.messaging.value_objects.message_source import MessageSource
 from tacto.domain.restaurant.repository import RestaurantRepository
 from tacto.domain.restaurant.value_objects.automation_type import AutomationType
+from tacto.domain.restaurant.value_objects.opening_hours import OpeningHours
+from tacto.domain.restaurant.value_objects.timezone_br import timezone_for_uf
 from tacto.domain.customer_memory.services.style_analyzer import CustomerStyleAnalyzer
 from tacto.shared.application import Failure, Ok, Success
-from tacto.shared.domain.value_objects import PhoneNumber
+from tacto.shared.domain.value_objects import PhoneNumber, RestaurantId
 
 
 logger = structlog.get_logger()
@@ -294,7 +296,11 @@ class ProcessIncomingMessageUseCase:
             except Exception as exc:
                 log.warning("rag_search_failed", error=str(exc))
 
-        # Load address + hours from Tacto (cached in Redis 1h)
+        # Load address + hours from Tacto (cached in Redis 1h).
+        # Tacto is the source of truth for opening hours: the fresh menu data
+        # also refreshes hours + timezone continuously, so the bot is at most
+        # one cache TTL behind whatever the owner configures in Tacto.
+        fresh_menu = None
         if self._menu_provider:
             try:
                 menu_result = await self._menu_provider.get_menu(
@@ -303,10 +309,50 @@ class ProcessIncomingMessageUseCase:
                     grupo_empresarial=str(restaurant.chave_grupo_empresarial),
                 )
                 if isinstance(menu_result, Success):
-                    tacto_address = menu_result.value.address or ""
-                    tacto_hours = menu_result.value.hours_text or ""
+                    fresh_menu = menu_result.value
+                    tacto_address = fresh_menu.address or ""
+                    tacto_hours = fresh_menu.hours_text or ""
             except Exception as exc:
                 log.warning("tacto_meta_fetch_failed", error=str(exc))
+
+        # Effective hours: fresh from Tacto when available, else DB fallback.
+        effective_hours = restaurant.opening_hours
+        if fresh_menu is not None and fresh_menu.opening_hours:
+            fresh_hours = OpeningHours.from_dict(fresh_menu.opening_hours)
+            if fresh_hours.is_defined():
+                effective_hours = fresh_hours
+                if fresh_menu.opening_hours != restaurant.opening_hours.to_dict():
+                    refresh_result = await self._restaurant_repo.update_opening_hours(
+                        RestaurantId(restaurant.id.value), fresh_menu.opening_hours
+                    )
+                    if isinstance(refresh_result, Failure):
+                        log.warning(
+                            "opening_hours_refresh_persist_failed",
+                            error=str(refresh_result.error),
+                        )
+                    else:
+                        log.info(
+                            "opening_hours_refreshed_from_tacto",
+                            days=list(fresh_menu.opening_hours.keys()),
+                        )
+
+        # Effective timezone: derived from the restaurant state (UF) when known.
+        effective_tz = restaurant.timezone
+        if fresh_menu is not None and fresh_menu.state_uf:
+            derived_tz = timezone_for_uf(fresh_menu.state_uf)
+            if derived_tz and derived_tz != restaurant.timezone:
+                tz_result = await self._restaurant_repo.update_timezone(
+                    RestaurantId(restaurant.id.value), derived_tz
+                )
+                if isinstance(tz_result, Failure):
+                    log.warning("timezone_refresh_persist_failed", error=str(tz_result.error))
+                else:
+                    effective_tz = derived_tz
+                    log.info(
+                        "timezone_refreshed_from_tacto",
+                        uf=fresh_menu.state_uf,
+                        timezone=derived_tz,
+                    )
 
         # Calculate if restaurant is open and next opening time.
         # BYPASS_HOURS_CHECK=true forces open state — useful for local testing.
@@ -315,11 +361,11 @@ class ProcessIncomingMessageUseCase:
         # closed. "Closed" is only asserted when hours are known and we are outside.
         is_open = (
             True
-            if _settings.app.bypass_hours_check or not restaurant.opening_hours.is_defined()
-            else restaurant.is_open_now()
+            if _settings.app.bypass_hours_check or not effective_hours.is_defined()
+            else effective_hours.is_open_now(effective_tz)
         )
-        next_opening_text = restaurant.opening_hours.get_next_opening(restaurant.timezone)
-        current_datetime = self._get_restaurant_current_datetime(restaurant.timezone)
+        next_opening_text = effective_hours.get_next_opening(effective_tz)
+        current_datetime = self._get_restaurant_current_datetime(effective_tz)
 
         persona = restaurant.agent_config
         agent_context = AgentContext(
@@ -330,7 +376,7 @@ class ProcessIncomingMessageUseCase:
             conversation_id=conversation.id.value,
             menu_url=restaurant.menu_url,
             prompt_default=restaurant.prompt_default,
-            opening_hours=restaurant.opening_hours.to_dict(),
+            opening_hours=effective_hours.to_dict(),
             automation_level=restaurant.automation_type,
             is_open=is_open,
             next_opening_text=next_opening_text,

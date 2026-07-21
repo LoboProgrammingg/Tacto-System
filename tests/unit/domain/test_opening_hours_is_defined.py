@@ -35,3 +35,40 @@ class TestOpeningHoursIsDefined:
 
     def test_full_week_open_is_defined(self):
         assert OpeningHours.all_day_every_day().is_defined() is True
+
+
+class TestNextOpeningIncludesDate:
+    """get_next_opening must show the explicit date next to the weekday."""
+
+    def test_tomorrow_includes_weekday_and_date(self):
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        tz = "America/Cuiaba"
+        now = datetime.now(ZoneInfo(tz))
+        tomorrow = now + timedelta(days=1)
+        # Only tomorrow's weekday is open, at a time already past for today.
+        days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        schedule = {d: {"is_closed": True} for d in days}
+        schedule[days[tomorrow.weekday()]] = {"opens_at": "00:01", "closes_at": "23:59"}
+        oh = OpeningHours.from_dict(schedule)
+
+        text = oh.get_next_opening(tz)
+        assert "amanhã" in text
+        assert f"({tomorrow.strftime('%d/%m')})" in text
+
+    def test_later_day_includes_date(self):
+        from datetime import datetime, timedelta
+        from zoneinfo import ZoneInfo
+
+        tz = "America/Cuiaba"
+        now = datetime.now(ZoneInfo(tz))
+        target = now + timedelta(days=3)
+        days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        schedule = {d: {"is_closed": True} for d in days}
+        schedule[days[target.weekday()]] = {"opens_at": "00:01", "closes_at": "23:59"}
+        oh = OpeningHours.from_dict(schedule)
+
+        text = oh.get_next_opening(tz)
+        assert f"({target.strftime('%d/%m')})" in text
+        assert "amanhã" not in text
