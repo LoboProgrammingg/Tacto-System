@@ -17,6 +17,7 @@ JsonResult = tuple[bool, Any]
 DEFAULT_TIMEOUT = 15
 HEALTH_TIMEOUT = 3
 SYNC_TIMEOUT = 180
+PERSONA_TIMEOUT = 8
 
 
 def _parse(response: requests.Response) -> JsonResult:
@@ -111,6 +112,7 @@ class TactoFlowClient:
         name: Optional[str] = None,
         menu_url: Optional[str] = None,
         prompt_default: Optional[str] = None,
+        timezone: Optional[str] = None,
         automation_type: Optional[int] = None,
         integration_type: Optional[int] = None,
         is_active: Optional[bool] = None,
@@ -130,6 +132,8 @@ class TactoFlowClient:
             payload["menu_url"] = menu_url
         if prompt_default is not None:
             payload["prompt_default"] = prompt_default
+        if timezone is not None:
+            payload["timezone"] = timezone
         if automation_type is not None:
             payload["automation_type"] = automation_type
         if integration_type is not None:
@@ -150,6 +154,30 @@ class TactoFlowClient:
                 timeout=DEFAULT_TIMEOUT,
             )
             return _parse(r)
+        except requests.RequestException as exc:
+            return False, f"Connection error: {exc}"
+
+    def get_restaurant_persona(self, restaurant_id: str) -> JsonResult:
+        """Read the CURRENT agent_config (persona) of a restaurant.
+
+        The deployed backend only includes ``agent_config`` in create/PATCH
+        responses — GET/list return it empty. So this sends an empty PATCH,
+        which is a no-op in the backend use case (no field applied, nothing
+        changes), and extracts ``agent_config`` from the response.
+        Replace with a plain GET once the backend exposes the field there.
+        """
+        try:
+            r = requests.patch(
+                f"{self._base}/api/v1/restaurants/{restaurant_id}",
+                headers=self._headers,
+                json={},
+                timeout=PERSONA_TIMEOUT,
+            )
+            ok, body = _parse(r)
+            if not ok:
+                return ok, body
+            persona = body.get("agent_config") if isinstance(body, dict) else None
+            return True, persona or {}
         except requests.RequestException as exc:
             return False, f"Connection error: {exc}"
 

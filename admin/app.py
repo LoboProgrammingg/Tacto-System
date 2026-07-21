@@ -13,10 +13,17 @@ import base64
 import json
 import os
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
+
+try:
+    # Real-time search-as-you-type. Falls back to st.text_input (Enter to apply).
+    from st_keyup import st_keyup
+except ImportError:
+    st_keyup = None
 
 from api_client import JoinClient, TactoFlowClient
 from config import Settings, get_settings
@@ -82,6 +89,34 @@ def _invalidate_caches() -> None:
     _cached_health.clear()
     _cached_restaurants.clear()
     _cached_instances.clear()
+    st.session_state.pop("persona_cache", None)
+
+
+def _persona_cache() -> dict[str, dict[str, Any]]:
+    """Session cache: current agent_config (persona) per restaurant id."""
+    if "persona_cache" not in st.session_state:
+        st.session_state.persona_cache = {}
+    return st.session_state.persona_cache
+
+
+def _load_personas(tacto: TactoFlowClient, restaurant_ids: list[str]) -> None:
+    """Fill the persona cache for the given restaurants.
+
+    Stops after 2 consecutive failures so an unstable API doesn't hang the page.
+    """
+    cache = _persona_cache()
+    failures = 0
+    for rid in restaurant_ids:
+        if rid in cache:
+            continue
+        ok, persona = tacto.get_restaurant_persona(rid)
+        if ok:
+            cache[rid] = persona
+            failures = 0
+        else:
+            failures += 1
+            if failures >= 2:
+                break
 
 
 st.set_page_config(
@@ -242,8 +277,9 @@ h1, h2, h3 { font-family: "Inter", "Segoe UI", sans-serif; color: var(--tacto-in
     background: #fff;
     box-shadow: 0 1px 2px rgba(16,24,40,0.05);
 }
-.tacto-muted { color: #667085; font-size: 0.85rem; }
-.tacto-restaurant-name { font-size: 1.05rem; font-weight: 700; color: var(--tacto-ink); }
+.tacto-muted { color: #8a94a6; font-size: 0.85rem; }
+/* inherit = segue o tema do Streamlit: branco no escuro, escuro no claro */
+.tacto-restaurant-name { font-size: 1.05rem; font-weight: 700; color: inherit; }
 </style>
 """
 
@@ -267,6 +303,14 @@ def _format_phone(raw: str | None) -> str:
     if len(digits) >= 12:
         return f"+{digits[:2]} ({digits[2:4]}) {digits[4:9]}-{digits[9:]}"
     return raw
+
+
+def _fold(text: str) -> str:
+    """Lowercase + strip accents so 'goias' matches 'Goiás'."""
+    return "".join(
+        ch for ch in unicodedata.normalize("NFD", text.lower())
+        if not unicodedata.combining(ch)
+    )
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -640,13 +684,82 @@ _GENDER_OPTIONS = ["(default plataforma)", "feminino", "masculino", "neutro"]
 _STYLE_OPTIONS = ["(default plataforma)", "formal", "informal"]
 
 
+def _save_attendant_name(tacto: TactoFlowClient, rid: str, name: str | None) -> None:
+    """Update only the attendant name, preserving all other persona overrides.
+
+    Re-reads the current persona right before writing (read-merge-write) so a
+    partial update can never wipe gender/style/emoji overrides.
+    """
+    ok, current = tacto.get_restaurant_persona(rid)
+    if not ok:
+        st.error(f"Não foi possível ler a persona atual — nada foi alterado. ({current})")
+        return
+    new_config = dict(current)
+    if name:
+        new_config["attendant_name"] = name
+    else:
+        new_config.pop("attendant_name", None)
+    with st.spinner("Salvando…"):
+        ok, payload = tacto.update_restaurant(rid, agent_config=new_config)
+    if not ok:
+        st.error(payload)
+        return
+    updated = payload.get("agent_config") if isinstance(payload, dict) else None
+    _persona_cache()[rid] = updated or {}
+    st.session_state.pop(f"qe-name-{rid}", None)
+    st.toast("Atendente atualizada.", icon="✅")
+    st.rerun()
+
+
+def _render_attendant_quick_edit(tacto: TactoFlowClient, r: dict[str, Any]) -> None:
+    """Compact popover to view/change the attendant name in two clicks."""
+    rid = r["id"]
+    persona = _persona_cache().get(rid) or {}
+    current_name = (persona.get("attendant_name") or "").strip()
+
+    with st.popover("✏️ Atendente", use_container_width=True):
+        st.caption(
+            f"Nome atual: **{current_name}**"
+            if current_name
+            else "Nome atual: *padrão da plataforma*"
+        )
+        new_name = st.text_input(
+            "Novo nome da atendente",
+            value=current_name,
+            key=f"qe-name-{rid}",
+            placeholder="ex: Julia",
+        )
+        col_save, col_default = st.columns(2)
+        if col_save.button(
+            "Salvar", key=f"qe-save-{rid}", type="primary", use_container_width=True
+        ):
+            candidate = new_name.strip()
+            if len(candidate) < 2:
+                st.error("O nome precisa de pelo menos 2 caracteres.")
+            elif candidate == current_name:
+                st.info("O nome já é esse.")
+            else:
+                _save_attendant_name(tacto, rid, candidate)
+        if col_default.button(
+            "Usar padrão",
+            key=f"qe-clear-{rid}",
+            use_container_width=True,
+            help="Remove o nome customizado — o bot volta ao padrão da plataforma.",
+        ):
+            _save_attendant_name(tacto, rid, None)
+
+
 def _render_edit_restaurant_form(tacto: TactoFlowClient, r: dict[str, Any]) -> None:
     """Render an inline edit form for a restaurant inside its card."""
     rid = r["id"]
     current_auto = int(r["automation_type"])
     current_int = int(r["integration_type"])
     current_active = bool(r["is_active"])
-    ac = r.get("agent_config") or {}
+    # Current persona comes from the session cache (no-op PATCH read) because
+    # the deployed backend returns agent_config empty on the list endpoint.
+    persona_cached = _persona_cache().get(rid)
+    persona_known = persona_cached is not None
+    ac = persona_cached or {}
     current_att_name = ac.get("attendant_name") or ""
     current_att_gender = ac.get("attendant_gender") or "(default plataforma)"
     current_style = ac.get("persona_style") or "(default plataforma)"
@@ -675,6 +788,13 @@ def _render_edit_restaurant_form(tacto: TactoFlowClient, r: dict[str, Any]) -> N
                 key=f"edit-int-{rid}",
             )
             new_active = col_e.toggle("Ativo", value=current_active, key=f"edit-active-{rid}")
+
+            new_timezone = st.text_input(
+                "Fuso horário (IANA)",
+                value=r.get("timezone", "") or "",
+                key=f"edit-tz-{rid}",
+                help="Ex: America/Sao_Paulo. Preenchido automaticamente pelo estado (UF) no tacto-sync.",
+            )
 
             st.markdown("**Persona do atendente** — deixe em *(default plataforma)* para usar o padrão global.")
             pcol_a, pcol_b = st.columns(2)
@@ -742,21 +862,30 @@ def _render_edit_restaurant_form(tacto: TactoFlowClient, r: dict[str, Any]) -> N
                 payload_kwargs["is_active"] = bool(new_active)
             if (new_prompt or "") != (r.get("prompt_default") or ""):
                 payload_kwargs["prompt_default"] = new_prompt
+            if new_timezone.strip() and new_timezone.strip() != (r.get("timezone") or ""):
+                payload_kwargs["timezone"] = new_timezone.strip()
 
             if clear_clicked:
                 payload_kwargs["agent_config"] = {}
             elif save_clicked:
-                persona: dict[str, Any] = {}
-                if new_att_name.strip():
-                    persona["attendant_name"] = new_att_name.strip()
-                if new_att_gender != "(default plataforma)":
-                    persona["attendant_gender"] = new_att_gender
-                if new_style != "(default plataforma)":
-                    persona["persona_style"] = new_style
-                if not emoji_default_toggle:
-                    persona["max_emojis_per_message"] = int(new_emoji_value)
-                if persona != ac:
-                    payload_kwargs["agent_config"] = persona
+                if not persona_known:
+                    st.warning(
+                        "Persona atual não carregada — os campos de persona não foram "
+                        "enviados para evitar sobrescrever configurações. "
+                        "Recarregue a página e tente novamente."
+                    )
+                else:
+                    persona: dict[str, Any] = {}
+                    if new_att_name.strip():
+                        persona["attendant_name"] = new_att_name.strip()
+                    if new_att_gender != "(default plataforma)":
+                        persona["attendant_gender"] = new_att_gender
+                    if new_style != "(default plataforma)":
+                        persona["persona_style"] = new_style
+                    if not emoji_default_toggle:
+                        persona["max_emojis_per_message"] = int(new_emoji_value)
+                    if persona != ac:
+                        payload_kwargs["agent_config"] = persona
 
             if not payload_kwargs:
                 st.info("Nenhuma alteração detectada.")
@@ -779,6 +908,7 @@ def _render_restaurantes(tacto: TactoFlowClient, join: JoinClient, settings: Set
     head_l.caption("Restaurantes ativos na plataforma. Use a busca pelo nome.")
     if head_r.button("Atualizar", key="refresh-restaurants", use_container_width=True):
         _cached_restaurants.clear()
+        st.session_state.pop("persona_cache", None)
         st.rerun()
 
     ok, payload = _cached_restaurants(settings.api_base_url, settings.api_key)
@@ -789,18 +919,47 @@ def _render_restaurantes(tacto: TactoFlowClient, join: JoinClient, settings: Set
     items = payload.get("items", []) if isinstance(payload, dict) else []
     items_sorted = sorted(items, key=lambda r: r["name"].lower())
 
-    c1, c2 = st.columns([3, 1])
-    query = c1.text_input("Buscar pelo nome", placeholder="ex: Frutos de Goias", label_visibility="collapsed").strip().lower()
-    c2.metric("Total", len(items_sorted))
+    cache = _persona_cache()
+    if any(r["id"] not in cache for r in items_sorted):
+        with st.spinner("Carregando atendentes atuais…"):
+            _load_personas(tacto, [r["id"] for r in items_sorted])
 
-    filtered = [r for r in items_sorted if query in r["name"].lower()] if query else items_sorted
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        if st_keyup is not None:
+            raw_query = st_keyup(
+                "Buscar",
+                key="rest-search",
+                debounce=250,
+                placeholder="Buscar por nome, atendente ou wp-empresa…",
+                label_visibility="collapsed",
+            )
+        else:
+            raw_query = st.text_input(
+                "Buscar",
+                placeholder="Buscar por nome, atendente ou wp-empresa…",
+                label_visibility="collapsed",
+                help="Digite e pressione Enter para filtrar.",
+            )
+    query = _fold((raw_query or "").strip())
+
+    def _matches(r: dict[str, Any]) -> bool:
+        persona = _persona_cache().get(r["id"]) or {}
+        haystack = _fold(
+            f'{r["name"]} {r["canal_master_id"]} {persona.get("attendant_name") or ""}'
+        )
+        return query in haystack
+
+    filtered = [r for r in items_sorted if _matches(r)] if query else items_sorted
+    c2.metric("Exibindo", f"{len(filtered)}/{len(items_sorted)}")
+
     if not filtered:
         st.info("Nenhum restaurante encontrado.")
         return
 
     for r in filtered:
         with st.container(border=True):
-            head_cols = st.columns([3.2, 1.4, 1.4])
+            head_cols = st.columns([3.0, 1.3, 1.3, 1.3])
             head_cols[0].markdown(
                 f'<div class="tacto-restaurant-name">{r["name"]}</div>',
                 unsafe_allow_html=True,
@@ -809,7 +968,20 @@ def _render_restaurantes(tacto: TactoFlowClient, join: JoinClient, settings: Set
                 f'<div class="tacto-muted">WhatsApp: <code>{r["canal_master_id"]}</code> · Empresa Base: <code>{r["empresa_base_id"]}</code></div>',
                 unsafe_allow_html=True,
             )
-            if head_cols[1].button("Conectar Join", key=f"join-{r['id']}", use_container_width=True):
+            persona = _persona_cache().get(r["id"])
+            if persona is None:
+                att_html = '<span class="tacto-muted">🎙️ Atendente: não carregada — clique em Atualizar</span>'
+            elif persona.get("attendant_name"):
+                att_html = f'🎙️ Atendente: <b>{persona["attendant_name"]}</b>'
+            else:
+                att_html = '🎙️ Atendente: <span class="tacto-muted">padrão da plataforma</span>'
+            head_cols[0].markdown(
+                f'<div style="margin-top:.15rem">{att_html}</div>',
+                unsafe_allow_html=True,
+            )
+            with head_cols[1]:
+                _render_attendant_quick_edit(tacto, r)
+            if head_cols[2].button("Conectar Join", key=f"join-{r['id']}", use_container_width=True):
                 with st.spinner(f"Conectando {r['name']} à Join…"):
                     ok, msg = _connect_join_for_restaurant(
                         join, r["canal_master_id"], settings.webhook_url
@@ -818,7 +990,7 @@ def _render_restaurantes(tacto: TactoFlowClient, join: JoinClient, settings: Set
                     st.success(f"{r['name']}: {msg}")
                 else:
                     st.error(msg)
-            if head_cols[2].button("Re-sync cardápio", key=f"sync-{r['id']}", use_container_width=True):
+            if head_cols[3].button("Re-sync cardápio", key=f"sync-{r['id']}", use_container_width=True):
                 with st.spinner(f"Sincronizando {r['name']}…"):
                     ok, sync = tacto.tacto_sync(r["id"])
                 if ok:

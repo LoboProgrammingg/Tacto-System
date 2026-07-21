@@ -90,6 +90,11 @@ setup_project_structure.py
 
 # Claude AI settings (local only)
 .claude/
+.playwright-mcp/
+.serena/
+
+# Admin dashboard local state (contains credentials - never commit)
+admin/.remembered_login.json
 
 # Alembic local overrides
 alembic.ini.local
