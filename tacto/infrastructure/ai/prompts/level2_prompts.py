@@ -516,7 +516,7 @@ Assim que abrirmos, será um prazer atender você!"""
             payment_methods=payment_methods or "Consulte o estabelecimento",
             memory_context=memory_context,
             custom_prompt=custom_prompt or "",
-            persona_communication_rules=Level1Prompts._build_communication_rules(persona_style, restaurant_name),
+            persona_communication_rules=Level1Prompts._build_communication_rules(persona_style, restaurant_name, attendant_gender),
             persona_language_rules=Level1Prompts._build_language_rules(persona_style, restaurant_name),
             emoji_rules=Level1Prompts._build_emoji_rules(max_emojis_per_message),
             restaurant_timezone=restaurant_timezone,

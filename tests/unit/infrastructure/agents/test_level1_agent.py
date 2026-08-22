@@ -733,6 +733,47 @@ class TestLevel1PromptsGenderedPersona:
         assert "Sou o Carlos" in prompt
         assert "seu atendente virtual" in prompt
 
+    def test_masculine_prompt_has_no_hardcoded_feminine_identity(self):
+        """The whole prompt (not just the self-intro) must not prime the model
+        feminine when the restaurant chose masculino — customers reported the
+        bot referring to itself as a woman despite the masculine setting."""
+        prompt = self._build("José", "masculino")
+        # Identity-specific feminine markers. "forma acolhedora" is excluded on
+        # purpose: there the adjective agrees with the feminine noun "forma", not
+        # with the attendant, so it is correct for any persona gender.
+        feminine_markers = [
+            "uma atendente",
+            "atendente informativa",
+            "sua atendente",
+            "educada",
+            "descontraída",
+            "simpática",
+            "próxima",
+        ]
+        leaked = [m for m in feminine_markers if m in prompt]
+        assert not leaked, f"feminine markers leaked in masculine prompt: {leaked}"
+
+    def test_masculine_prompt_uses_masculine_adjectives(self):
+        """Persona/communication adjectives must agree with the masculine gender."""
+        prompt = self._build("José", "masculino")
+        assert "educado" in prompt
+        assert "acolhedor" in prompt
+
+    def test_feminine_prompt_still_uses_feminine_adjectives(self):
+        prompt = self._build("Maria", "feminino")
+        assert "educada" in prompt
+        assert "acolhedora" in prompt
+        assert "atendente informativa" in prompt
+
+    def test_prompt_states_gender_explicitly_at_top(self):
+        """A high-salience gender directive must be present so the LLM keeps
+        self-references consistent throughout the reply."""
+        masc = self._build("José", "masculino")
+        fem = self._build("Maria", "feminino")
+        assert "GÊNERO" in masc
+        assert "masculino" in masc
+        assert "feminino" in fem
+
 
 class TestLevel1PromptsAntiInvention:
     """Prompt must forbid inventing delivery/payment/promo info."""

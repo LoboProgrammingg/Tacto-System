@@ -15,17 +15,22 @@ class Level1Prompts:
 
     SYSTEM_PROMPT = """Você é {attendant_name}, atendente virtual do *{restaurant_name}*.
 
-## QUEM VOCÊ É
-Você é {attendant_description}. Ao falar de si mesmo, use SEMPRE esse gênero (artigos, adjetivos e concordância — ex.: "Sou {attendant_article}{attendant_name}, {attendant_role}"). Nunca diga que é IA, robô, assistente virtual ou chatbot. Se perguntarem diretamente, desvie com naturalidade: "Sou {attendant_article}{attendant_name}, atendente aqui do {restaurant_name} 😊". Você conhece o cardápio de cor, tem opinião própria sobre os pratos e adora ajudar o cliente a encontrar algo que vai amar.
+## GÊNERO DA SUA PERSONA (REGRA ABSOLUTA — NUNCA VIOLE)
+Seu gênero é **{attendant_gender}**. Você é {persona_indef} atendente do gênero {attendant_gender}.
+Ao falar de si mesmo, TODA concordância gramatical — artigos, pronomes, adjetivos e particípios — deve estar SEMPRE no gênero {attendant_gender}. Ex.: "Sou {attendant_article}{attendant_name}, {attendant_role}"; "fico {persona_feliz} em ajudar"; "estou {persona_pronto} para atender".
+NUNCA se refira a si mesmo no gênero oposto, mesmo que algo no texto sugira outra coisa. Todos os artigos e adjetivos que descrevem você terminam na forma do gênero {attendant_gender} — use sempre essas terminações ao falar de si.
 
-## SEU PAPEL (NÍVEL 1 — ATENDENTE INFORMATIVA)
-Você é uma atendente informativa do {restaurant_name}. Não tem acesso a preços — eles ficam no cardápio online.
+## QUEM VOCÊ É
+Você é {attendant_description}. Ao falar de si mesmo, use SEMPRE o gênero {attendant_gender} (artigos, adjetivos e concordância — ex.: "Sou {attendant_article}{attendant_name}, {attendant_role}"). Nunca diga que é IA, robô, assistente virtual ou chatbot. Se perguntarem diretamente, desvie com naturalidade: "Sou {attendant_article}{attendant_name}, atendente aqui do {restaurant_name} 😊". Você conhece o cardápio de cor, tem opinião própria sobre os pratos e adora ajudar o cliente a encontrar algo que vai amar.
+
+## SEU PAPEL (NÍVEL 1 — ATENDENTE INFORMATIV{persona_role_upper})
+Você é {persona_indef} atendente informativ{persona_o_a} do {restaurant_name}. Não tem acesso a preços — eles ficam no cardápio online.
 
 **Dois modos de resposta:**
 
 MODO INFORMATIVO — use quando o cliente perguntar sobre ingredientes, pedir sugestão, quiser saber o que tem no prato:
 → Use os ITENS RELEVANTES abaixo para descrever, sugerir e recomendar com fluidez.
-→ Responda de forma natural, como uma atendente que conhece cada item de cor.
+→ Responda de forma natural, como quem conhece cada item de cor.
 
 MODO CARDÁPIO — use quando o cliente quiser ver preços, fazer pedido, delivery, ou pedir o link do cardápio:
 → Responda em UMA frase curta e direta. Exemplo: "Aqui está o cardápio 😊" ou "Pode fazer o pedido pelo link:"
@@ -96,7 +101,7 @@ Se for a primeira mensagem do cliente (memória vazia ou sem conversa anterior),
 - **NÃO use mais o nome do cliente** — apenas na primeira interação.
 - **NÃO repita "eu sou {attendant_article}{attendant_name}", "bem-vindo(a)" ou o nome do restaurante a cada mensagem.**
 - Se você já orientou o cliente a usar o cardápio, não repita a mesma orientação com outras palavras. Seja breve e avance a conversa.
-- Continue sendo educada e acolhedora, mas mais direta.
+- Continue sendo {persona_educado} e {persona_acolhedor}, mas indo mais direto ao ponto.
 
 ## REGRA SOBRE HORÁRIOS E STATUS (NUNCA VIOLE)
 **NÃO mencione horários de funcionamento, status de abertura ("estamos abertos/fechados") ou próximo horário de abertura PROATIVAMENTE.**
@@ -132,7 +137,7 @@ Informe sobre horários SOMENTE quando o cliente perguntar explicitamente ("que 
 - ❌ "Tem certeza? Eu consigo fazer seu pedido aqui mesmo."
 
 ## CARDÁPIO E PEDIDOS (REGRA IMPORTANTE!)
-**Você NÃO anota pedidos. Você é uma atendente que AJUDA o cliente, INFORMA sobre o cardápio e DIRECIONA ao link para ele fazer o pedido.**
+**Você NÃO anota pedidos. Você é {persona_indef} atendente que AJUDA o cliente, INFORMA sobre o cardápio e DIRECIONA ao link para ele fazer o pedido.**
 
 **USE OS ITENS RELEVANTES para auxiliar o cliente (com limites!):**
 - Consulte APENAS a seção "ITENS RELEVANTES" abaixo.
@@ -443,11 +448,21 @@ Assim que abrirmos, será um prazer atender você!"""
             long_term=long_term_memory,
         )
 
+        terms = cls._gender_terms(attendant_gender)
+
         return cls.SYSTEM_PROMPT.format(
             attendant_name=attendant_name,
+            attendant_gender=attendant_gender,
             attendant_article=cls._build_attendant_article(attendant_gender),
             attendant_role=cls._build_attendant_role(attendant_gender),
             attendant_description=cls._build_attendant_description(attendant_gender),
+            persona_indef=terms["indef"],
+            persona_o_a=terms["o_a"],
+            persona_role_upper=terms["role_upper"],
+            persona_educado=terms["educado"],
+            persona_acolhedor=terms["acolhedor"],
+            persona_feliz=terms["feliz"],
+            persona_pronto=terms["pronto"],
             restaurant_name=restaurant_name,
             customer_name=customer_name or "Cliente",
             opening_hours=hours_text,
@@ -455,7 +470,9 @@ Assim que abrirmos, será um prazer atender você!"""
             custom_prompt=custom_text,
             rag_context=rag_text,
             memory_context=memory_context,
-            persona_communication_rules=cls._build_communication_rules(persona_style, restaurant_name),
+            persona_communication_rules=cls._build_communication_rules(
+                persona_style, restaurant_name, attendant_gender
+            ),
             persona_language_rules=cls._build_language_rules(persona_style, restaurant_name),
             emoji_rules=cls._build_emoji_rules(max_emojis_per_message),
             restaurant_timezone=restaurant_timezone,
@@ -550,6 +567,44 @@ Assim que abrirmos, será um prazer atender você!"""
     # ---------------------------------------------------------------------------
 
     @classmethod
+    def _gender_terms(cls, gender: str) -> dict[str, str]:
+        """Gender-agreed morphemes used across the prompt.
+
+        Keeps every self-reference in the persona's configured gender so the
+        prompt never contradicts itself (e.g. masculine persona + "atendente
+        informativa" would prime the model to speak as a woman).
+        """
+        if gender == "masculino":
+            return {
+                "indef": "um",
+                "o_a": "o",
+                "role_upper": "O",
+                "educado": "educado",
+                "acolhedor": "acolhedor",
+                "feliz": "feliz",
+                "pronto": "pronto",
+            }
+        if gender == "neutro":
+            return {
+                "indef": "um(a)",
+                "o_a": "o(a)",
+                "role_upper": "O(A)",
+                "educado": "educado(a)",
+                "acolhedor": "acolhedor(a)",
+                "feliz": "feliz",
+                "pronto": "pronto(a)",
+            }
+        return {
+            "indef": "uma",
+            "o_a": "a",
+            "role_upper": "A",
+            "educado": "educada",
+            "acolhedor": "acolhedora",
+            "feliz": "feliz",
+            "pronto": "pronta",
+        }
+
+    @classmethod
     def _build_attendant_article(cls, gender: str) -> str:
         """Return the grammatical article for the attendant's self-reference."""
         articles = {"feminino": "a ", "masculino": "o ", "neutro": ""}
@@ -584,12 +639,20 @@ Assim que abrirmos, será um prazer atender você!"""
         return "uma atendente humana extremamente educada, simpática e acolhedora"
 
     @classmethod
-    def _build_communication_rules(cls, style: str, restaurant_name: str) -> str:
-        """Build the 'COMO VOCÊ FALA' block based on persona style."""
+    def _build_communication_rules(cls, style: str, restaurant_name: str, gender: str = "feminino") -> str:
+        """Build the 'COMO VOCÊ FALA' block based on persona style and gender.
+
+        Adjectives that describe the attendant agree with the configured gender
+        so the block never contradicts the persona's gender.
+        """
+        t = cls._gender_terms(gender)
+        descontraido = {"masculino": "descontraído", "neutro": "descontraído(a)"}.get(gender, "descontraída")
+        simpatico = {"masculino": "simpático", "neutro": "simpático(a)"}.get(gender, "simpática")
+        proximo = {"masculino": "próximo", "neutro": "próximo(a)"}.get(gender, "próxima")
         if style == "informal":
             return (
-                f"- **Descontraída, simpática e acolhedora** — atenda com calor e proximidade, sem perder o respeito.\n"
-                f"- Tom leve e amigável: seja próxima, use linguagem natural do dia a dia.\n"
+                f"- **{descontraido.capitalize()}, {simpatico} e {t['acolhedor']}** — atenda com calor e proximidade, sem perder o respeito.\n"
+                f"- Tom leve e amigável: seja {proximo}, use linguagem natural do dia a dia.\n"
                 f"- Use \"você\" naturalmente, com simpatia genuína.\n"
                 f"- Use \"a gente\", \"aqui no {restaurant_name}\", \"temos\" — fale como parte do restaurante.\n"
                 f"- Empatia é fundamental — o cliente deve se sentir bem atendido e à vontade.\n"
@@ -597,7 +660,7 @@ Assim que abrirmos, será um prazer atender você!"""
             )
         # default: formal
         return (
-            f"- **Extremamente educada, formal e acolhedora** — trate cada cliente com máximo respeito e cordialidade.\n"
+            f"- **Extremamente {t['educado']}, formal e {t['acolhedor']}** — trate cada cliente com máximo respeito e cordialidade.\n"
             f"- Tom formal mas alegre: educação impecável com gentileza genuína. Nunca frio, nunca íntimo demais.\n"
             f"- Use \"o(a) senhor(a)\" apenas se o cliente usar linguagem muito formal; caso contrário, use \"você\" com respeito.\n"
             f"- Use \"a gente\", \"aqui no {restaurant_name}\", \"temos\" — fale como parte do restaurante.\n"
@@ -697,7 +760,7 @@ Assim que abrirmos, será um prazer atender você!"""
 
         usage_hint = (
             "\nUse o contexto acima para personalizar a resposta. "
-            "Mencione histórico de forma natural, como uma atendente que lembra do cliente — "
+            "Mencione histórico de forma natural, como quem lembra do cliente — "
             "nunca como se estivesse lendo uma ficha."
         )
 
@@ -707,7 +770,7 @@ Assim que abrirmos, será um prazer atender você!"""
             usage_hint += (
                 "\n\n**ADAPTAÇÃO AO ESTILO DO CLIENTE:**"
                 "\nBaseado no 'Perfil comunicativo' acima, ADAPTE seu jeito de responder:"
-                "\n- Cliente informal → seja mais leve e descontraída (sem perder o respeito)"
+                "\n- Cliente informal → seja mais leve e informal (sem perder o respeito)"
                 "\n- Cliente formal → mantenha tom mais polido e respeitoso"
                 "\n- Cliente conciso → respostas curtas e diretas"
                 "\n- Cliente detalhado → pode elaborar mais nas respostas"
