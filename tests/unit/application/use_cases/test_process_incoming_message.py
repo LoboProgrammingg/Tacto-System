@@ -732,3 +732,86 @@ class TestFreshHoursRefresh:
         assert args[1] == "America/Belem"
         _, call_kwargs = mock_ai_agent.process.call_args
         assert call_kwargs["context"].restaurant_timezone == "America/Belem"
+
+
+class TestMenuRagByAutomationLevel:
+    """Menu semantic search runs for BASIC and is skipped for BASIC_NO_MENU."""
+
+    HITS = [{"content": "Combo Pizza G + Pizza P + Coca 1,5L", "metadata": {}, "similarity": 0.8}]
+
+    async def _run(self, restaurant, repos, dto):
+        embedding_client = MagicMock()
+        embedding_client.generate_embedding = AsyncMock(return_value=Success([0.1, 0.2]))
+        vector_store = MagicMock()
+        vector_store.search_menu = AsyncMock(return_value=Success(self.HITS))
+        restaurant_repo, conversation_repo, message_repo, messaging_client, ai_agent = repos
+        use_case = ProcessIncomingMessageUseCase(
+            restaurant_repository=restaurant_repo,
+            conversation_repository=conversation_repo,
+            message_repository=message_repo,
+            messaging_client=messaging_client,
+            ai_agent=ai_agent,
+            vector_store=vector_store,
+            embedding_client=embedding_client,
+        )
+
+        with patch("tacto.application.use_cases.process_incoming_message.get_settings") as ms:
+            ms.return_value.app.conversation_history_limit = 10
+            ms.return_value.app.conversation_reset_after_hours = 24
+            ms.return_value.app.bypass_hours_check = True
+            ms.return_value.app.ai_disable_hours = 12
+            ms.return_value.gemini.level1_rag_search_limit = 5
+            result = await use_case.execute(dto)
+
+        assert isinstance(result, Success)
+        _, call_kwargs = ai_agent.process.call_args
+        return call_kwargs["context"], embedding_client, vector_store
+
+    @pytest.mark.asyncio
+    async def test_basic_no_menu_skips_menu_search(
+        self,
+        mock_restaurant,
+        mock_restaurant_repository,
+        mock_conversation_repository,
+        mock_message_repository,
+        mock_messaging_client,
+        mock_ai_agent,
+        incoming_message_dto,
+    ):
+        mock_restaurant.automation_type = AutomationType.BASIC_NO_MENU
+
+        context, embedding_client, vector_store = await self._run(
+            mock_restaurant,
+            (mock_restaurant_repository, mock_conversation_repository,
+             mock_message_repository, mock_messaging_client, mock_ai_agent),
+            incoming_message_dto,
+        )
+
+        embedding_client.generate_embedding.assert_not_called()
+        vector_store.search_menu.assert_not_called()
+        assert context.rag_context == ""
+        assert context.automation_level == AutomationType.BASIC_NO_MENU
+
+    @pytest.mark.asyncio
+    async def test_basic_still_searches_menu(
+        self,
+        mock_restaurant,
+        mock_restaurant_repository,
+        mock_conversation_repository,
+        mock_message_repository,
+        mock_messaging_client,
+        mock_ai_agent,
+        incoming_message_dto,
+    ):
+        """Control: BASIC keeps injecting menu hits into the agent context."""
+        context, embedding_client, vector_store = await self._run(
+            mock_restaurant,
+            (mock_restaurant_repository, mock_conversation_repository,
+             mock_message_repository, mock_messaging_client, mock_ai_agent),
+            incoming_message_dto,
+        )
+
+        embedding_client.generate_embedding.assert_awaited_once()
+        vector_store.search_menu.assert_awaited_once()
+        assert "Combo Pizza G" in context.rag_context
+        assert context.automation_level == AutomationType.BASIC

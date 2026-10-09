@@ -67,6 +67,7 @@ class AgentFactory:
                 return init_result
             self._agents[AutomationType.BASIC] = level1
             self._agents[AutomationType.INTERMEDIATE] = level1
+            self._agents[AutomationType.BASIC_NO_MENU] = level1
 
             level2 = Level2Agent(
                 order_service=self._order_service,

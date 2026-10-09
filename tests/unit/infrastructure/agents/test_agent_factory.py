@@ -57,6 +57,13 @@ class TestAgentFactory:
         agent = create_agent(3)
         assert isinstance(agent, Level2Agent)
 
+    def test_create_agent_basic_no_menu_returns_level1(self):
+        """BASIC_NO_MENU (4) should return Level1Agent — informativo sem cardápio."""
+        for level in (AutomationType.BASIC_NO_MENU, 4):
+            agent = create_agent(level)
+            assert isinstance(agent, Level1Agent)
+            assert agent.level == 1
+
     def test_create_agent_unknown_level_fallback(self):
         """Unknown level should fallback to Level1Agent."""
         agent = create_agent(99)

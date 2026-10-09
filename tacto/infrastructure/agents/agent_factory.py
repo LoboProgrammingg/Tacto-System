@@ -5,6 +5,7 @@ AutomationType mapping:
   1 (BASIC)        → Level1Agent — informativo, horários, endereço, menu básico
   2 (INTERMEDIATE) → Level2Agent — coleta pedidos mas NÃO finaliza, faz handoff para atendente
   3 (ADVANCED)     → Level3Agent — automação completa (FUTURO, não implementado)
+  4 (BASIC_NO_MENU)→ Level1Agent — informativo sem cardápio (só institucional + link)
 
 Level 2 monta o carrinho completo mas SEMPRE pede para o cliente aguardar
 um atendente humano para confirmar taxa de entrega e finalizar o pedido.
@@ -43,7 +44,7 @@ def create_agent(
     """
     level = int(automation_type)
 
-    if level == AutomationType.BASIC:
+    if level in (AutomationType.BASIC, AutomationType.BASIC_NO_MENU):
         logger.debug("Creating Level1Agent", automation_type=level)
         return Level1Agent(memory_manager=memory_manager)
 

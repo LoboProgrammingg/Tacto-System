@@ -683,7 +683,12 @@ def _connect_join_for_restaurant(
     return False, f"Webhook não configurou: {last_err}"
 
 
-_AUTOMATION_LABELS = {1: "1 — BASIC", 2: "2 — INTERMEDIATE", 3: "3 — ADVANCED"}
+_AUTOMATION_LABELS = {
+    1: "1 — BASIC",
+    4: "4 — BASIC SEM CARDÁPIO",
+    2: "2 — INTERMEDIATE",
+    3: "3 — ADVANCED",
+}
 _INTEGRATION_LABELS = {1: "1 — Tacto", 2: "2 — JOIN"}
 _GENDER_OPTIONS = ["(default plataforma)", "feminino", "masculino", "neutro"]
 _STYLE_OPTIONS = ["(default plataforma)", "formal", "informal"]
@@ -785,8 +790,8 @@ def _render_edit_restaurant_form(tacto: TactoFlowClient, r: dict[str, Any]) -> N
             col_c, col_d, col_e = st.columns([1.2, 1.2, 1])
             new_automation = col_c.selectbox(
                 "Automação",
-                options=[1, 2, 3],
-                index=[1, 2, 3].index(current_auto),
+                options=list(_AUTOMATION_LABELS),
+                index=list(_AUTOMATION_LABELS).index(current_auto),
                 format_func=lambda x: _AUTOMATION_LABELS[x],
                 key=f"edit-auto-{rid}",
             )

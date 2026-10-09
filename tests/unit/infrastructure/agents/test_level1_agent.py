@@ -823,3 +823,93 @@ class TestLevel1AgentStaleContext:
 
         mock_memory.load_context.assert_not_called()
         mock_memory.search_relevant.assert_not_called()
+
+
+class TestLevel1NoMenuVariant:
+    """BASIC_NO_MENU: same agent, prompt never teaches the LLM about menu items."""
+
+    RAG = "Itens do cardápio relacionados à pergunta do cliente:\n• Combo Pizza G + Pizza P + Coca 1,5L"
+    MENU_ITEM_MARKERS = (
+        "Calabresa",
+        "Margherita",
+        "conhece o cardápio de cor",
+        "USE OS ITENS RELEVANTES",
+        "MODO INFORMATIVO",
+        "COMO SUGERIR ITENS",
+    )
+
+    def _prompt(self, **overrides) -> str:
+        kwargs = dict(
+            restaurant_name="Predileta",
+            menu_url="https://cardapio.com",
+            opening_hours={},
+            customer_name="Cliente",
+            rag_context=self.RAG,
+            tacto_address="Rua A, 1",
+            tacto_hours="18h-23h",
+            custom_prompt="Aceitamos pix.",
+        )
+        kwargs.update(overrides)
+        return Level1Prompts.build_system_prompt(**kwargs)
+
+    def test_no_menu_prompt_has_no_item_instructions_or_examples(self):
+        prompt = self._prompt(menu_items_enabled=False)
+
+        for marker in self.MENU_ITEM_MARKERS:
+            assert marker not in prompt
+        assert "NÃO informa sobre itens do cardápio" in prompt
+        assert "Nunca cite nome de prato, sabor, tamanho, ingrediente ou combo" in prompt
+
+    def test_no_menu_prompt_ignores_rag_context(self):
+        prompt = self._prompt(menu_items_enabled=False)
+
+        assert "Combo Pizza G" not in prompt
+        assert Level1Prompts._NO_MENU_RAG_TEXT in prompt
+
+    def test_no_menu_prompt_keeps_shared_rules(self):
+        prompt = self._prompt(menu_items_enabled=False)
+
+        assert "TRANSFERÊNCIA PARA ATENDENTE HUMANO" in prompt
+        assert "NUNCA escreva links ou URLs na sua resposta" in prompt
+        assert "ENTREGA, TAXAS, PAGAMENTO E PROMOÇÕES — NUNCA INVENTE" in prompt
+        assert "Rua A, 1" in prompt
+        assert "Aceitamos pix." in prompt
+        assert "{" not in prompt
+
+    def test_default_prompt_still_talks_about_menu_items(self):
+        """Control: levels with menu keep every item instruction and the RAG hits."""
+        prompt = self._prompt()
+
+        for marker in self.MENU_ITEM_MARKERS:
+            assert marker in prompt
+        assert "Combo Pizza G" in prompt
+        assert Level1Prompts._NO_MENU_RAG_TEXT not in prompt
+        assert "{" not in prompt
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "level, expects_menu_items",
+        [(AutomationType.BASIC_NO_MENU, False), (AutomationType.BASIC, True)],
+    )
+    async def test_agent_picks_prompt_variant_from_automation_level(
+        self,
+        agent_context: AgentContext,
+        level: AutomationType,
+        expects_menu_items: bool,
+    ):
+        agent_context.automation_level = level
+        agent_context.rag_context = self.RAG
+        agent = Level1Agent()
+
+        with patch.object(agent, "_initialized", True):
+            with patch.object(agent, "_chain") as mock_chain:
+                mock_chain.ainvoke = AsyncMock(return_value="Está tudo no cardápio 😊")
+                await agent.process(
+                    message="Qual a menor pizza de vocês?",
+                    context=agent_context,
+                    conversation_history=[],
+                )
+
+        system_prompt = mock_chain.ainvoke.call_args[0][0]["system_prompt"]
+        assert ("Combo Pizza G" in system_prompt) is expects_menu_items
+        assert ("USE OS ITENS RELEVANTES" in system_prompt) is expects_menu_items

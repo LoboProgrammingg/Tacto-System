@@ -61,7 +61,7 @@ class CreateRestaurantRequest(BaseModel):
     canal_master_id: str = Field(..., min_length=1)
     empresa_base_id: str = Field(..., min_length=1)
     integration_type: int = Field(default=2, ge=1, le=2)
-    automation_type: int = Field(default=1, ge=1, le=3)
+    automation_type: int = Field(default=1, ge=1, le=4)
     agent_config: Optional[AgentPersonaConfigSchema] = Field(
         default=None,
         description="Configurações de persona do atendente virtual. Null = usa todos os padrões do .env.",
@@ -88,7 +88,7 @@ class UpdateRestaurantRequest(BaseModel):
         default=None,
         description="Fuso horário IANA (ex: America/Sao_Paulo).",
     )
-    automation_type: Optional[int] = Field(default=None, ge=1, le=3)
+    automation_type: Optional[int] = Field(default=None, ge=1, le=4)
     integration_type: Optional[int] = Field(default=None, ge=1, le=2)
     is_active: Optional[bool] = Field(default=None)
     agent_config: Optional[AgentPersonaConfigSchema] = Field(

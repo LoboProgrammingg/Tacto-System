@@ -26,6 +26,7 @@ from tacto.config import get_settings
 from tacto.application.ports.agent_port import BaseAgent
 from tacto.domain.ai_assistance.value_objects.agent_context import AgentContext
 from tacto.domain.ai_assistance.value_objects.agent_response import AgentResponse
+from tacto.domain.restaurant.value_objects.automation_type import AutomationType
 from tacto.infrastructure.ai.prompts.level1_prompts import Level1Prompts
 from tacto.application.services.memory_orchestration_service import MemoryManager
 from tacto.shared.application import Err, Failure, Ok, Success
@@ -270,6 +271,9 @@ class Level1Agent(BaseAgent):
                 current_date_br=context.current_date_br,
                 current_time_br=context.current_time_br,
                 current_weekday_pt=context.current_weekday_pt,
+                menu_items_enabled=AutomationType(
+                    context.automation_level
+                ).can_discuss_menu_items,
             )
 
             history = []

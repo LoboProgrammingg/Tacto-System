@@ -158,3 +158,26 @@ async def test_update_no_fields_is_noop():
 
     assert isinstance(result, Success)
     assert result.value.name == "Original Name"
+
+
+def test_update_schema_accepts_basic_no_menu_and_rejects_unknown_level():
+    from pydantic import ValidationError
+
+    from tacto.interfaces.http.schemas.restaurant import UpdateRestaurantRequest
+
+    assert UpdateRestaurantRequest(automation_type=4).automation_type == 4
+    with pytest.raises(ValidationError):
+        UpdateRestaurantRequest(automation_type=5)
+
+
+@pytest.mark.asyncio
+async def test_update_moves_restaurant_to_basic_no_menu():
+    r = _make_restaurant()
+    repo = _InMemoryRepo(r)
+    uc = UpdateRestaurantUseCase(repo)  # type: ignore[arg-type]
+
+    result = await uc.execute(r.id.value, UpdateRestaurantDTO(automation_type=4))
+
+    assert isinstance(result, Success)
+    assert result.value.automation_type == 4
+    assert r.automation_type is AutomationType.BASIC_NO_MENU

@@ -282,7 +282,11 @@ class ProcessIncomingMessageUseCase:
             except Exception as exc:
                 log.warning("rag_level2_search_failed", error=str(exc))
 
-        elif self._vector_store and self._embedding_client:
+        elif (
+            restaurant.automation_type.can_discuss_menu_items
+            and self._vector_store
+            and self._embedding_client
+        ):
             # Level 1: Use pgvector semantic search (no prices)
             try:
                 embed_result = await self._embedding_client.generate_embedding(dto.body)

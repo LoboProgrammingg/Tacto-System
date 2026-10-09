@@ -15,11 +15,14 @@ class AutomationType(IntEnum):
     INTERMEDIATE (2): Coleta pedidos - monta carrinho mas NÃO finaliza,
                       sempre faz handoff para atendente confirmar taxa e pedido
     ADVANCED (3): Automação completa - finaliza pedido sem intervenção humana (futuro)
+    BASIC_NO_MENU (4): Informativo sem cardápio - só institucional + link do cardápio,
+                       nunca fala de itens, sabores, tamanhos ou ingredientes
     """
 
     BASIC = 1
     INTERMEDIATE = 2
     ADVANCED = 3
+    BASIC_NO_MENU = 4
 
     @property
     def display_name(self) -> str:
@@ -28,8 +31,14 @@ class AutomationType(IntEnum):
             AutomationType.BASIC: "Básico (Informativo)",
             AutomationType.INTERMEDIATE: "Intermediário (Pedidos + Handoff)",
             AutomationType.ADVANCED: "Avançado (Automação Completa)",
+            AutomationType.BASIC_NO_MENU: "Básico — Sem Cardápio",
         }
         return names.get(self, "Unknown")
+
+    @property
+    def can_discuss_menu_items(self) -> bool:
+        """Check if this level may talk about menu items (names, sizes, ingredients)."""
+        return self != AutomationType.BASIC_NO_MENU
 
     @property
     def can_access_menu(self) -> bool:
@@ -63,7 +72,8 @@ class AutomationType(IntEnum):
             return cls(value)
         except ValueError:
             raise ValueError(
-                f"Invalid automation type: {value}. Must be 1 (BASIC), 2 (INTERMEDIATE), or 3 (ADVANCED)"
+                f"Invalid automation type: {value}. "
+                "Must be 1 (BASIC), 2 (INTERMEDIATE), 3 (ADVANCED), or 4 (BASIC_NO_MENU)"
             )
 
     def __str__(self) -> str:
