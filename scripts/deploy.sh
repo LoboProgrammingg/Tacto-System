@@ -38,6 +38,9 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
+# Imagem em uso antes do deploy (vazio se a API ainda não existe)
+PREV_IMAGE=$(docker inspect "$CONTAINER_API" --format '{{.Image}}' 2>/dev/null || true)
+
 echo ">>> Build da imagem Docker..."
 # Via compose: a imagem construída é exatamente a que o `up` abaixo usa
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build api
@@ -64,6 +67,14 @@ docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" run --rm --no-deps api 
 
 echo ">>> Subindo API..."
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-deps api
+
+# O prune no fim apaga a imagem anterior; esta tag preserva a última que rodou
+CURR_IMAGE=$(docker inspect "$CONTAINER_API" --format '{{.Image}}' 2>/dev/null || true)
+if [ -n "$PREV_IMAGE" ] && [ "$PREV_IMAGE" != "$CURR_IMAGE" ]; then
+    docker tag "$PREV_IMAGE" "tacto-system-api:rollback-$ENV" \
+        && echo ">>> Imagem anterior preservada em tacto-system-api:rollback-$ENV" \
+        || echo ">>> AVISO: não foi possível criar a tag de rollback"
+fi
 
 echo ">>> Aguardando health check..."
 for i in $(seq 1 30); do
