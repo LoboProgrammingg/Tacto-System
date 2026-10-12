@@ -15,7 +15,6 @@ if [ "$ENV" = "prod" ]; then
     CONTAINER_API="tactoflow_api_prod"
     CONTAINER_DB="tactoflow_postgres_prod"
     CONTAINER_REDIS="tactoflow_redis_prod"
-    IMAGE_TAG="tacto-system-api:prod"
 elif [ "$ENV" = "dev" ]; then
     APP_DIR="/root/Tacto-System-dev"
     COMPOSE_FILE="docker-compose.dev.yml"
@@ -23,7 +22,6 @@ elif [ "$ENV" = "dev" ]; then
     CONTAINER_API="tactoflow_api_dev"
     CONTAINER_DB="tactoflow_postgres_dev"
     CONTAINER_REDIS="tactoflow_redis_dev"
-    IMAGE_TAG="tacto-system-api:dev"
 else
     echo "Uso: bash deploy.sh [prod|dev]"
     exit 1
@@ -41,10 +39,8 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 echo ">>> Build da imagem Docker..."
-docker build \
-    -f Dockerfile.prod \
-    -t "$IMAGE_TAG" \
-    .
+# Via compose: a imagem construída é exatamente a que o `up` abaixo usa
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build api
 
 echo ">>> Subindo infra (postgres + redis)..."
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d postgres redis
